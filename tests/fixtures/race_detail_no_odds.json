@@ -1,0 +1,25 @@
+{
+  "discipline": "TROT ATTELE",
+  "hippodrome": {
+    "libelleCourt": "CABOURG"
+  },
+  "heureDepart": 1708945200000,
+  "distance": 2175,
+  "nombreDeclaresPartants": 2,
+  "participants": [
+    {
+      "numPmu": 1,
+      "nom": "AIGLE ROYAL",
+      "driver": "MASSCHAELE K",
+      "entraineur": "VANDAMME B",
+      "statut": "PARTANT"
+    },
+    {
+      "numPmu": 2,
+      "nom": "BELLA LUNA",
+      "driver": "BARRIER A",
+      "entraineur": "BARRIER A",
+      "statut": "PARTANT"
+    }
+  ]
+}

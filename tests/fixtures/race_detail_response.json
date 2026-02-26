@@ -1,0 +1,52 @@
+{
+  "discipline": "TROT ATTELE",
+  "hippodrome": {
+    "libelleCourt": "VINCENNES",
+    "libelle": "Hippodrome de Vincennes"
+  },
+  "heureDepart": 1708945200000,
+  "distance": 2700,
+  "etatPiste": "BON",
+  "nombreDeclaresPartants": 3,
+  "participants": [
+    {
+      "numPmu": 1,
+      "nom": "BELLO STAR",
+      "driver": "BAUDOUIN R",
+      "entraineur": "MARTENS C",
+      "placeCorde": 1,
+      "poidsKg": 72.0,
+      "distanceHandicap": 0,
+      "deferre": "DEFERRE_ANTERIEURS_POSTERIEURS",
+      "statut": "PARTANT",
+      "coteMatin": "4.5",
+      "coteDirect": "3.8"
+    },
+    {
+      "numPmu": 2,
+      "nom": "CALYPSO DU BERLAIS",
+      "driver": "RAFFIN E",
+      "entraineur": "RAFFIN E",
+      "placeCorde": 2,
+      "poidsKg": 68.5,
+      "distanceHandicap": 25,
+      "deferre": "",
+      "statut": "PARTANT",
+      "coteMatin": "6.0",
+      "coteDirect": "5.2"
+    },
+    {
+      "numPmu": 3,
+      "nom": "DERBY DES BOIS",
+      "driver": "NIVARD F",
+      "entraineur": "TAVERNIER C",
+      "placeCorde": 3,
+      "poidsKg": 74.0,
+      "distanceHandicap": 0,
+      "deferre": "",
+      "statut": "NON_PARTANT",
+      "coteMatin": "12.0",
+      "coteDirect": null
+    }
+  ]
+}

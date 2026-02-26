@@ -11,89 +11,49 @@ pip install -r requirements.txt
 # Run Streamlit dashboard
 streamlit run src/dashboard/app.py
 
-# Run tests
+# Run all tests
 pytest tests/
 
 # Run a single test file
 pytest tests/test_scraper.py -v
 ```
 
-## Repository Structure
+## Project Status
 
-```
-src/
-├── scraper/     # PMU API + secondary source scrapers
-├── features/    # Feature engineering (form, jockey, market signals)
-├── model/       # Rule-based scorer → future LightGBM lambdarank
-├── trading/     # EV+ detection, Kelly staking, P&L logging
-└── dashboard/   # Streamlit app
-data/
-├── raw/         # Raw API responses (git-ignored)
-└── processed/   # hippique.duckdb + cleaned datasets (git-ignored)
-config/
-└── settings.py  # Central config: paths, API URLs, trading constants
-notebooks/       # Exploration & analysis
-logs/            # Prediction logs, P&L records (git-ignored)
-```
+Greenfield project — directory structure and `config/settings.py` are in place, but all `src/` modules are empty stubs. Implementation starts from scratch.
 
-## Project Overview
+Full project context and domain knowledge is in `CONTEXT.md`.
 
-A **paper-trading** horse race prediction system targeting positive expected value (EV+) bets on French PMU races (Trot only). The system compares model probability against the implied pool probability to identify mispriced combinations. No real money is involved until ROI is validated over 30+ race days.
+## Architecture
 
-The core challenge: PMU retains ~25-28% of the pool, so the model must outperform the crowd by enough to overcome that structural handicap.
+**Pipeline flow:** `scraper/` → `features/` → `model/` → `trading/` → `dashboard/`
 
-## Planned Tech Stack
+Each stage is a separate package under `src/`. The Streamlit app in `dashboard/` is the only user-facing entry point.
 
-| Layer | Technology |
-|-------|-----------|
-| Data collection | Python (`httpx` + `BeautifulSoup`) |
-| Scheduling | APScheduler or cron |
-| Storage | DuckDB |
-| Feature engineering | Pandas / Polars |
-| Model (POC) | Rule-based scoring → LightGBM lambdarank |
-| Dashboard | Streamlit |
+**Central config** (`config/settings.py`): all file paths, API URLs, and trading constants live here. Import from this module — never hardcode paths or magic numbers.
 
-## Data Sources
+Key constants already defined:
+- `DB_PATH` — DuckDB database at `data/processed/hippique.duckdb`
+- `RAW_DIR` / `LOG_DIR` — data and log directories (both git-ignored)
+- `PMU_BASE`, `PMU_REUNIONS`, `PMU_RACE`, `PMU_HORSE` — PMU API URL templates
+- `KELLY_FRACTION = 0.25`, `EV_THRESHOLD = 1.0`, `UNIT_STAKE = 2.0`
 
-**PMU Unofficial API (primary)**
-- Daily program: `https://online.pmu.fr/rest/catalog/reunions`
-- Race detail: `https://online.pmu.fr/rest/catalog/reunions/{date}/R{n}/C{n}`
-- Horse history: `https://online.pmu.fr/rest/horse/{horseName}`
+## Key Technical Decisions
 
-**Secondary (scraping):** geny.com, paris-turf.com, Equidia, Zeturf
+- **HTTP client:** `httpx` (not `requests`)
+- **Logging:** `loguru` (not stdlib `logging`)
+- **Storage:** DuckDB — use analytical SQL directly, avoid ORM abstractions
+- **DataFrames:** Polars preferred for performance; Pandas acceptable for compatibility
+- **Scheduling:** APScheduler for the daily pipeline
+- **Secrets:** use `.env` file (loaded via `python-dotenv`); never hardcode credentials
 
-## Architecture Plan
+## Domain Summary
 
-The pipeline is structured in four sequential parts:
+French PMU trot-race prediction system. The core loop:
+1. Scrape PMU API for today's races and horse data
+2. Score each horse with rule-based features (form, jockey, odds drift)
+3. Compare model probability vs implied pool probability
+4. Log EV+ bets (where `model_prob > implied_prob * EV_THRESHOLD`) with Kelly-sized stakes
+5. After races, record actual results and compute paper P&L
 
-1. **Data pipeline** — scrape PMU API for program + runners, extract odds/stats/jockey/trainer, store raw data in DuckDB
-2. **Rule-based scoring model** — recent form score (weighted positions over last 5 races), jockey win rate on distance, odds rank vs model rank divergence
-3. **Paper trading simulation** — run model before races, log predictions with timestamps, compare against evening results, compute fictitious ROI on Gagnant, Placé, Duo
-4. **Iteration** — error analysis, feature refinement, eventual replacement with LightGBM (lambdarank)
-
-## Key Domain Concepts
-
-**Bet types by priority:**
-- `Duo` — 2 horses, most crowd errors → best EV+ opportunities
-- `Quinté+` — high combinatorial complexity → more mispricing
-- `Gagnant/Placé` — simple but highest take rate friction; only play with strong model confidence
-
-**EV+ condition:** only bet when `model_probability > implied_pool_probability`
-
-**Kelly criterion (conservative staking):**
-```python
-f = (p * b - q) / b  # p=win_prob, q=1-p, b=decimal_odds-1
-```
-
-**Key features to engineer:**
-- Horse form: position in last N races (3/5/10), avg gap to winner, win rate by distance/track
-- Jockey & trainer: win rates (global, by distance, by track), jockey×horse synergy
-- Market signals: morning vs final odds drift, pool implied probability vs model probability
-- Race context: track condition, distance fit, field size, race category
-
-## Project Constraints
-
-- **Trot races only** (more consistent than flat; Quinté+ is almost always trot)
-- **Paper trading** until ROI is validated
-- **Stack philosophy:** lightweight and fast to iterate — DuckDB over PostgreSQL, rules before ML
-- **Language:** Python
+Only **Trot** races. Paper trading only until ROI is validated over 30+ race days.

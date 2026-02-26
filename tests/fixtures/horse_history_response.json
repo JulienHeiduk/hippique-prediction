@@ -1,0 +1,15 @@
+{
+  "nom": "BELLO STAR",
+  "performances": [
+    {"date": "20240101", "hippodrome": "VINCENNES", "ordreArrivee": 1, "nombrePartants": 14, "ecartVainqueur": 0.0, "disqualifie": false},
+    {"date": "20231215", "hippodrome": "PARIS-VINCENNES", "ordreArrivee": 3, "nombrePartants": 12, "ecartVainqueur": 2.5, "disqualifie": false},
+    {"date": "20231130", "hippodrome": "ENGHIEN", "ordreArrivee": 2, "nombrePartants": 10, "ecartVainqueur": 1.2, "disqualifie": false},
+    {"date": "20231105", "hippodrome": "VINCENNES", "ordreArrivee": 5, "nombrePartants": 15, "ecartVainqueur": 8.0, "disqualifie": false},
+    {"date": "20231020", "hippodrome": "CABOURG", "ordreArrivee": 1, "nombrePartants": 9, "ecartVainqueur": 0.0, "disqualifie": false},
+    {"date": "20230915", "hippodrome": "VINCENNES", "ordreArrivee": 4, "nombrePartants": 13, "ecartVainqueur": 5.5, "disqualifie": true},
+    {"date": "20230830", "hippodrome": "LAVAL", "ordreArrivee": 2, "nombrePartants": 11, "ecartVainqueur": 0.8, "disqualifie": false},
+    {"date": "20230810", "hippodrome": "VINCENNES", "ordreArrivee": 1, "nombrePartants": 12, "ecartVainqueur": 0.0, "disqualifie": false},
+    {"date": "20230720", "hippodrome": "GRAIGNES", "ordreArrivee": 6, "nombrePartants": 14, "ecartVainqueur": 12.3, "disqualifie": false},
+    {"date": "20230705", "hippodrome": "VINCENNES", "ordreArrivee": 3, "nombrePartants": 10, "ecartVainqueur": 3.1, "disqualifie": false}
+  ]
+}
