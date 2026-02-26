@@ -2,6 +2,40 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Commands
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run Streamlit dashboard
+streamlit run src/dashboard/app.py
+
+# Run tests
+pytest tests/
+
+# Run a single test file
+pytest tests/test_scraper.py -v
+```
+
+## Repository Structure
+
+```
+src/
+├── scraper/     # PMU API + secondary source scrapers
+├── features/    # Feature engineering (form, jockey, market signals)
+├── model/       # Rule-based scorer → future LightGBM lambdarank
+├── trading/     # EV+ detection, Kelly staking, P&L logging
+└── dashboard/   # Streamlit app
+data/
+├── raw/         # Raw API responses (git-ignored)
+└── processed/   # hippique.duckdb + cleaned datasets (git-ignored)
+config/
+└── settings.py  # Central config: paths, API URLs, trading constants
+notebooks/       # Exploration & analysis
+logs/            # Prediction logs, P&L records (git-ignored)
+```
+
 ## Project Overview
 
 A **paper-trading** horse race prediction system targeting positive expected value (EV+) bets on French PMU races (Trot only). The system compares model probability against the implied pool probability to identify mispriced combinations. No real money is involved until ROI is validated over 30+ race days.
