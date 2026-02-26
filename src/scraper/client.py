@@ -2,15 +2,13 @@
 from __future__ import annotations
 
 import time
-import urllib.parse
 from datetime import date as date_type
 from typing import Any
 
 import httpx
 from loguru import logger
 
-from config.settings import PMU_HORSE, PMU_RACE, PMU_REUNIONS
-from src.scraper.parser import sanitize_horse_name
+from config.settings import PMU_RACE, PMU_REUNIONS
 
 
 class PipelineError(Exception):
@@ -24,11 +22,17 @@ _HEADERS = {
         "Chrome/120.0.0.0 Safari/537.36"
     ),
     "Referer": "https://www.pmu.fr/",
-    "Accept": "application/json",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "fr-FR,fr;q=0.9",
 }
 
-_POLITE_DELAY = 0.5   # seconds between requests
+_POLITE_DELAY = 0.5    # seconds between requests
 _RATE_LIMIT_SLEEP = 30  # seconds to sleep on HTTP 429
+
+
+def _to_api_date(date_yyyymmdd: str) -> str:
+    """Convert YYYYMMDD → DDMMYYYY (PMU URL date format)."""
+    return date_yyyymmdd[6:8] + date_yyyymmdd[4:6] + date_yyyymmdd[0:4]
 
 
 class PMUClient:
@@ -57,25 +61,18 @@ class PMUClient:
     # ------------------------------------------------------------------
 
     def fetch_reunions(self, date: str | None = None) -> dict:
-        """Fetch the full race program for *date* (YYYYMMDD). Defaults to today."""
+        """Fetch the full race programme for *date* (YYYYMMDD). Defaults to today."""
         if date is None:
             date = date_type.today().strftime("%Y%m%d")
-        url = f"{PMU_REUNIONS}/{date}"
+        api_date = _to_api_date(date)
+        url = PMU_REUNIONS.format(date=api_date)
         return self._get_with_retry(url)
 
     def fetch_race(self, date: str, reunion: int, course: int) -> dict:
-        """Fetch detail for a single race."""
-        url = PMU_RACE.format(date=date, reunion=reunion, course=course)
+        """Fetch participants for a single race."""
+        api_date = _to_api_date(date)
+        url = PMU_RACE.format(date=api_date, reunion=reunion, course=course)
         return self._get_with_retry(url)
-
-    def fetch_horse(self, horse_name: str) -> dict | None:
-        """Fetch horse history. Returns None on 404, never raises."""
-        encoded = urllib.parse.quote(sanitize_horse_name(horse_name))
-        url = PMU_HORSE.format(name=encoded)
-        try:
-            return self._get_with_retry(url)
-        except PipelineError:
-            return None
 
     # ------------------------------------------------------------------
     # Internal

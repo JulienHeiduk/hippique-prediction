@@ -45,9 +45,15 @@ def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
             weight_kg          DOUBLE,
             handicap_distance  INTEGER,
             deferre            BOOLEAN DEFAULT FALSE,
-            scratch            BOOLEAN DEFAULT FALSE
+            scratch            BOOLEAN DEFAULT FALSE,
+            musique            VARCHAR,
+            finish_position    INTEGER,
+            km_time            VARCHAR
         )
     """)
+    # Idempotent migrations — no-op if columns already exist
+    conn.execute("ALTER TABLE runners ADD COLUMN IF NOT EXISTS finish_position INTEGER")
+    conn.execute("ALTER TABLE runners ADD COLUMN IF NOT EXISTS km_time VARCHAR")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS odds (
             odds_id        VARCHAR PRIMARY KEY,
@@ -101,7 +107,7 @@ def upsert_runners(conn: duckdb.DuckDBPyConnection, runners: list[dict]) -> None
         return
     conn.executemany("""
         INSERT OR REPLACE INTO runners VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
     """, [
         [
@@ -116,6 +122,9 @@ def upsert_runners(conn: duckdb.DuckDBPyConnection, runners: list[dict]) -> None
             r.get("handicap_distance"),
             r.get("deferre", False),
             r.get("scratch", False),
+            r.get("musique"),
+            r.get("finish_position"),
+            r.get("km_time"),
         ]
         for r in runners
     ])

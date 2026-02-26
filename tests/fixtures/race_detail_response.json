@@ -1,13 +1,4 @@
 {
-  "discipline": "TROT ATTELE",
-  "hippodrome": {
-    "libelleCourt": "VINCENNES",
-    "libelle": "Hippodrome de Vincennes"
-  },
-  "heureDepart": 1708945200000,
-  "distance": 2700,
-  "etatPiste": "BON",
-  "nombreDeclaresPartants": 3,
   "participants": [
     {
       "numPmu": 1,
@@ -15,12 +6,12 @@
       "driver": "BAUDOUIN R",
       "entraineur": "MARTENS C",
       "placeCorde": 1,
-      "poidsKg": 72.0,
-      "distanceHandicap": 0,
+      "handicapDistance": 0,
       "deferre": "DEFERRE_ANTERIEURS_POSTERIEURS",
       "statut": "PARTANT",
-      "coteMatin": "4.5",
-      "coteDirect": "3.8"
+      "musique": "1a2a3a1a(5)a",
+      "dernierRapportReference": {"rapport": 4.5, "typePari": "SIMPLE_GAGNANT"},
+      "dernierRapportDirect": {"rapport": 3.8, "typePari": "SIMPLE_GAGNANT"}
     },
     {
       "numPmu": 2,
@@ -28,12 +19,12 @@
       "driver": "RAFFIN E",
       "entraineur": "RAFFIN E",
       "placeCorde": 2,
-      "poidsKg": 68.5,
-      "distanceHandicap": 25,
-      "deferre": "",
+      "handicapDistance": 25,
+      "deferre": "SANS_FERS",
       "statut": "PARTANT",
-      "coteMatin": "6.0",
-      "coteDirect": "5.2"
+      "musique": "3a2a1a4a2a",
+      "dernierRapportReference": {"rapport": 6.0, "typePari": "SIMPLE_GAGNANT"},
+      "dernierRapportDirect": {"rapport": 5.2, "typePari": "SIMPLE_GAGNANT"}
     },
     {
       "numPmu": 3,
@@ -41,12 +32,12 @@
       "driver": "NIVARD F",
       "entraineur": "TAVERNIER C",
       "placeCorde": 3,
-      "poidsKg": 74.0,
-      "distanceHandicap": 0,
-      "deferre": "",
+      "handicapDistance": 0,
+      "deferre": "SANS_FERS",
       "statut": "NON_PARTANT",
-      "coteMatin": "12.0",
-      "coteDirect": null
+      "musique": "5a1a2a3a",
+      "dernierRapportReference": {"rapport": 12.0, "typePari": "SIMPLE_GAGNANT"},
+      "dernierRapportDirect": null
     }
   ]
 }

@@ -37,11 +37,6 @@ def race_no_odds_raw():
 
 
 @pytest.fixture()
-def horse_raw():
-    return load_fixture("horse_history_response.json")
-
-
-@pytest.fixture()
 def mem_conn():
     """In-memory DuckDB connection with schema initialised."""
     from src.scraper.storage import init_schema
@@ -73,27 +68,11 @@ class TestParseReunions:
         assert races[0].race_id == "20240226-R1-C1"
         assert races[1].race_id == "20240226-R1-C2"
 
-
-class TestParseRace:
-    def test_missing_optional_fields_returns_none(self):
-        from src.scraper.parser import parse_race
-        # Minimal dict — no optional fields
-        raw = {"discipline": "TROT ATTELE"}
-        race = parse_race(raw, "20240226", 1, 1)
-        assert race.hippodrome is None
-        assert race.distance_metres is None
-        assert race.track_condition is None
-        assert race.race_datetime is None
-
-    def test_is_trot_set_correctly(self, race_raw):
-        from src.scraper.parser import parse_race
-        race = parse_race(race_raw, "20240226", 1, 1)
-        assert race.is_trot is True
-
-    def test_raw_file_path_stored(self, race_raw):
-        from src.scraper.parser import parse_race
-        race = parse_race(race_raw, "20240226", 1, 1, raw_file_path="/some/path.json")
-        assert race.raw_file_path == "/some/path.json"
+    def test_discipline_stored_as_specialite(self, reunions_raw):
+        from src.scraper.parser import parse_reunions
+        races = parse_reunions(reunions_raw, "20240226")
+        assert races[0].discipline == "TROT_ATTELE"
+        assert races[1].discipline == "TROT_MONTE"
 
 
 class TestParseRunners:
@@ -113,7 +92,7 @@ class TestParseRunners:
 
     def test_skips_runner_without_name(self):
         from src.scraper.parser import parse_runners
-        raw = {"participants": [{"numPmu": 1}]}  # no nom field
+        raw = {"participants": [{"numPmu": 1}]}
         runners = parse_runners(raw, "20240226-R1-C1")
         assert runners == []
 
@@ -122,12 +101,17 @@ class TestParseRunners:
         runners = parse_runners(race_raw, "20240226-R1-C1")
         assert len(runners) == 3
 
+    def test_musique_stored(self, race_raw):
+        from src.scraper.parser import parse_runners
+        runners = parse_runners(race_raw, "20240226-R1-C1")
+        assert runners[0].musique == "1a2a3a1a(5)a"
+
 
 class TestParseOdds:
     def test_computes_implied_prob(self, race_raw):
         from src.scraper.parser import parse_odds
         odds = parse_odds(race_raw, "20240226-R1-C1")
-        morning = next(o for o in odds if o.odds_type == "morning" and "1" in o.runner_id.split("-")[-1])
+        morning = next(o for o in odds if o.odds_type == "morning" and o.runner_id == "20240226-R1-C1-1")
         assert morning.decimal_odds == 4.5
         assert abs(morning.implied_prob - 1 / 4.5) < 1e-6
 
@@ -136,30 +120,12 @@ class TestParseOdds:
         odds = parse_odds(race_no_odds_raw, "20240226-R1-C1")
         assert odds == []
 
-    def test_null_odds_not_included(self, race_raw):
+    def test_null_direct_rapport_not_included(self, race_raw):
         from src.scraper.parser import parse_odds
         odds = parse_odds(race_raw, "20240226-R1-C1")
-        # Runner 3 has null coteDirect — should have no "final" entry
-        final_runner3 = [o for o in odds if o.odds_type == "final" and o.runner_id.endswith("-3")]
+        # Runner 3 has null dernierRapportDirect — no "final" entry
+        final_runner3 = [o for o in odds if o.odds_type == "final" and o.runner_id == "20240226-R1-C1-3"]
         assert final_runner3 == []
-
-
-class TestParseHorseHistory:
-    def test_count(self, horse_raw):
-        from src.scraper.parser import parse_horse_history
-        rows = parse_horse_history(horse_raw, "BELLO STAR", "20240226-R1-C1")
-        assert len(rows) == 10
-
-    def test_disqualified_flag(self, horse_raw):
-        from src.scraper.parser import parse_horse_history
-        rows = parse_horse_history(horse_raw, "BELLO STAR", "20240226-R1-C1")
-        disq = [r for r in rows if r.disqualified]
-        assert len(disq) == 1
-
-    def test_finish_position_parsed(self, horse_raw):
-        from src.scraper.parser import parse_horse_history
-        rows = parse_horse_history(horse_raw, "BELLO STAR", "20240226-R1-C1")
-        assert rows[0].finish_position == 1
 
 
 class TestHelpers:
@@ -173,16 +139,22 @@ class TestHelpers:
         from src.scraper.parser import safe_float
         assert safe_float("4.50") == 4.5
 
-    def test_is_trot_handles_space(self):
+    def test_is_trot_handles_variants(self):
         from src.scraper.parser import _is_trot
-        assert _is_trot("TROT ATTELE") is True
-        assert _is_trot("TROT MONTE") is True
+        assert _is_trot("TROT_ATTELE") is True
+        assert _is_trot("TROT_MONTE") is True
         assert _is_trot("PLAT") is False
+        assert _is_trot("OBSTACLE") is False
         assert _is_trot(None) is False
 
     def test_sanitize_horse_name(self):
         from src.scraper.parser import sanitize_horse_name
         assert sanitize_horse_name("Étoile d'Or") == "ETOILE_D'OR"
+
+    def test_date_conversion(self):
+        from src.scraper.client import _to_api_date
+        assert _to_api_date("20240226") == "26022024"
+        assert _to_api_date("20260101") == "01012026"
 
 
 # ---------------------------------------------------------------------------
@@ -205,14 +177,14 @@ class TestPMUClient:
             else:
                 resp.status_code = 200
                 resp.raise_for_status.return_value = None
-                resp.json.return_value = {"reunions": []}
+                resp.json.return_value = {"programme": {"reunions": []}}
             return resp
 
         with patch("httpx.Client.get", side_effect=mock_get):
-            with patch("time.sleep"):  # suppress delays
+            with patch("time.sleep"):
                 client = PMUClient(max_retries=3, backoff_base=0.01)
                 result = client.fetch_reunions("20240226")
-                assert result == {"reunions": []}
+                assert result == {"programme": {"reunions": []}}
                 assert call_count == 3
 
     def test_fetch_reunions_raises_after_max_retries(self):
@@ -230,19 +202,26 @@ class TestPMUClient:
                 with pytest.raises(PipelineError):
                     client.fetch_reunions("20240226")
 
-    def test_fetch_horse_returns_none_on_404(self):
-        from src.scraper.client import PipelineError, PMUClient
+    def test_fetch_reunions_uses_ddmmyyyy_format(self):
+        """URL sent to the API must use DDMMYYYY, not YYYYMMDD."""
+        from src.scraper.client import PMUClient
+
+        called_urls = []
 
         def mock_get(url, **_):
+            called_urls.append(url)
             resp = MagicMock()
-            resp.status_code = 404
+            resp.status_code = 200
+            resp.raise_for_status.return_value = None
+            resp.json.return_value = {"programme": {"reunions": []}}
             return resp
 
         with patch("httpx.Client.get", side_effect=mock_get):
             with patch("time.sleep"):
-                client = PMUClient(max_retries=1)
-                result = client.fetch_horse("BELLO STAR")
-                assert result is None
+                client = PMUClient()
+                client.fetch_reunions("20240226")
+
+        assert called_urls[0].endswith("26022024")
 
 
 # ---------------------------------------------------------------------------
@@ -252,7 +231,6 @@ class TestPMUClient:
 class TestStorage:
     def test_init_schema_idempotent(self, mem_conn):
         from src.scraper.storage import init_schema
-        # Second call must not raise
         init_schema(mem_conn)
         tables = mem_conn.execute("SHOW TABLES").fetchall()
         table_names = {t[0] for t in tables}
@@ -267,7 +245,7 @@ class TestStorage:
             "race_datetime": None,
             "distance_metres": 2700,
             "track_condition": "BON",
-            "discipline": "TROT ATTELE",
+            "discipline": "TROT_ATTELE",
             "is_trot": True,
             "field_size": 12,
             "reunion_number": 1,
@@ -275,7 +253,7 @@ class TestStorage:
             "raw_file_path": None,
         }
         upsert_race(mem_conn, race)
-        race["field_size"] = 14  # update
+        race["field_size"] = 14
         upsert_race(mem_conn, race)
         row = mem_conn.execute(
             "SELECT field_size FROM races WHERE race_id = ?",
@@ -294,16 +272,37 @@ class TestStorage:
                 "jockey_name": "JOCKEY",
                 "trainer_name": "TRAINER",
                 "draw_position": i,
-                "weight_kg": 70.0,
+                "weight_kg": None,
                 "handicap_distance": 0,
                 "deferre": False,
                 "scratch": False,
+                "musique": "1a2a3a",
             }
             for i in range(1, 6)
         ]
         upsert_runners(mem_conn, runners)
         count = mem_conn.execute("SELECT COUNT(*) FROM runners").fetchone()[0]
         assert count == 5
+
+    def test_musique_persisted(self, mem_conn):
+        from src.scraper.storage import upsert_runners
+        runners = [{
+            "runner_id": "20240226-R1-C1-1",
+            "race_id": "20240226-R1-C1",
+            "horse_number": 1,
+            "horse_name": "BELLO STAR",
+            "jockey_name": None,
+            "trainer_name": None,
+            "draw_position": None,
+            "weight_kg": None,
+            "handicap_distance": 0,
+            "deferre": False,
+            "scratch": False,
+            "musique": "1a2a3a1a",
+        }]
+        upsert_runners(mem_conn, runners)
+        row = mem_conn.execute("SELECT musique FROM runners WHERE runner_id = ?", ["20240226-R1-C1-1"]).fetchone()
+        assert row[0] == "1a2a3a1a"
 
 
 # ---------------------------------------------------------------------------
@@ -313,27 +312,26 @@ class TestStorage:
 class TestPipeline:
     def _make_reunions_response(self):
         return {
-            "reunions": [
-                {
-                    "numOfficiel": 1,
-                    "hippodrome": {"libelleCourt": "VINCENNES"},
-                    "courses": [
-                        {"numOrdre": 1, "discipline": "TROT ATTELE", "nombreDeclaresPartants": 2},
-                        {"numOrdre": 2, "discipline": "PLAT", "nombreDeclaresPartants": 10},
-                    ],
-                }
-            ]
+            "programme": {
+                "reunions": [
+                    {
+                        "numOfficiel": 1,
+                        "hippodrome": {"libelleCourt": "VINCENNES"},
+                        "courses": [
+                            {"numOrdre": 1, "specialite": "TROT_ATTELE", "nombreDeclaresPartants": 2},
+                            {"numOrdre": 2, "specialite": "PLAT", "nombreDeclaresPartants": 10},
+                        ],
+                    }
+                ]
+            }
         }
 
-    def _make_race_response(self):
+    def _make_participants_response(self):
         return {
-            "discipline": "TROT ATTELE",
-            "hippodrome": {"libelleCourt": "VINCENNES"},
-            "distance": 2700,
             "participants": [
-                {"numPmu": 1, "nom": "HORSE_A", "driver": "JOCKEY_A", "statut": "PARTANT"},
-                {"numPmu": 2, "nom": "HORSE_B", "driver": "JOCKEY_B", "statut": "PARTANT"},
-            ],
+                {"numPmu": 1, "nom": "HORSE_A", "driver": "JOCKEY_A", "statut": "PARTANT", "musique": "1a2a"},
+                {"numPmu": 2, "nom": "HORSE_B", "driver": "JOCKEY_B", "statut": "PARTANT", "musique": "3a1a"},
+            ]
         }
 
     def test_skips_non_trot_races(self, tmp_path):
@@ -346,14 +344,13 @@ class TestPipeline:
         ):
             instance = MockClient.return_value.__enter__.return_value
             instance.fetch_reunions.return_value = self._make_reunions_response()
-            instance.fetch_race.return_value = self._make_race_response()
-            instance.fetch_horse.return_value = None
+            instance.fetch_race.return_value = self._make_participants_response()
 
             mock_conn.return_value = duckdb.connect(":memory:")
             from src.scraper.storage import init_schema
             init_schema(mock_conn.return_value)
 
-            result = run(date="20240226", fetch_horse_history=False, db_path=tmp_path / "test.duckdb")
+            result = run(date="20240226", db_path=tmp_path / "test.duckdb")
 
         # Only 1 trot race (PLAT is skipped)
         assert result.races_fetched == 1
@@ -363,16 +360,18 @@ class TestPipeline:
         from src.scraper.pipeline import run
 
         reunion_data = {
-            "reunions": [
-                {
-                    "numOfficiel": 1,
-                    "hippodrome": {"libelleCourt": "VINCENNES"},
-                    "courses": [
-                        {"numOrdre": 1, "discipline": "TROT ATTELE", "nombreDeclaresPartants": 2},
-                        {"numOrdre": 2, "discipline": "TROT ATTELE", "nombreDeclaresPartants": 2},
-                    ],
-                }
-            ]
+            "programme": {
+                "reunions": [
+                    {
+                        "numOfficiel": 1,
+                        "hippodrome": {"libelleCourt": "VINCENNES"},
+                        "courses": [
+                            {"numOrdre": 1, "specialite": "TROT_ATTELE"},
+                            {"numOrdre": 2, "specialite": "TROT_ATTELE"},
+                        ],
+                    }
+                ]
+            }
         }
 
         call_count = {"n": 0}
@@ -380,8 +379,8 @@ class TestPipeline:
         def fetch_race_side_effect(date, reunion, course):
             call_count["n"] += 1
             if call_count["n"] == 1:
-                raise PipelineError("Simulated race fetch failure")
-            return self._make_race_response()
+                raise PipelineError("Simulated failure")
+            return self._make_participants_response()
 
         with (
             patch("src.scraper.pipeline.PMUClient") as MockClient,
@@ -391,56 +390,12 @@ class TestPipeline:
             instance = MockClient.return_value.__enter__.return_value
             instance.fetch_reunions.return_value = reunion_data
             instance.fetch_race.side_effect = fetch_race_side_effect
-            instance.fetch_horse.return_value = None
 
             mock_conn.return_value = duckdb.connect(":memory:")
             from src.scraper.storage import init_schema
             init_schema(mock_conn.return_value)
 
-            result = run(date="20240226", fetch_horse_history=False, db_path=tmp_path / "test.duckdb")
+            result = run(date="20240226", db_path=tmp_path / "test.duckdb")
 
         assert result.races_fetched == 1
         assert len(result.errors) == 1
-
-    def test_deduplicates_horse_fetches(self, tmp_path):
-        from src.scraper.pipeline import run
-
-        # Same horse appears in 2 races
-        reunion_data = {
-            "reunions": [
-                {
-                    "numOfficiel": 1,
-                    "hippodrome": {"libelleCourt": "VINCENNES"},
-                    "courses": [
-                        {"numOrdre": 1, "discipline": "TROT ATTELE"},
-                        {"numOrdre": 2, "discipline": "TROT ATTELE"},
-                    ],
-                }
-            ]
-        }
-        race_with_same_horse = {
-            "discipline": "TROT ATTELE",
-            "hippodrome": {"libelleCourt": "VINCENNES"},
-            "participants": [
-                {"numPmu": 1, "nom": "SHARED_HORSE", "statut": "PARTANT"},
-            ],
-        }
-
-        with (
-            patch("src.scraper.pipeline.PMUClient") as MockClient,
-            patch("src.scraper.pipeline.save_raw"),
-            patch("src.scraper.pipeline.get_connection") as mock_conn,
-        ):
-            instance = MockClient.return_value.__enter__.return_value
-            instance.fetch_reunions.return_value = reunion_data
-            instance.fetch_race.return_value = race_with_same_horse
-            instance.fetch_horse.return_value = {"performances": []}
-
-            mock_conn.return_value = duckdb.connect(":memory:")
-            from src.scraper.storage import init_schema
-            init_schema(mock_conn.return_value)
-
-            run(date="20240226", fetch_horse_history=True, db_path=tmp_path / "test.duckdb")
-
-        # fetch_horse should only be called once despite horse appearing in 2 races
-        assert instance.fetch_horse.call_count == 1

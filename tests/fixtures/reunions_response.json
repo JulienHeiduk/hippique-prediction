@@ -1,46 +1,49 @@
 {
-  "reunions": [
-    {
-      "numOfficiel": 1,
-      "hippodrome": {
-        "libelleCourt": "VINCENNES",
-        "libelle": "Hippodrome de Vincennes"
-      },
-      "courses": [
-        {
-          "numOrdre": 1,
-          "discipline": "TROT ATTELE",
-          "heureDepart": 1708945200000,
-          "distance": 2700,
-          "etatPiste": "BON",
-          "nombreDeclaresPartants": 12
+  "programme": {
+    "reunions": [
+      {
+        "numOfficiel": 1,
+        "hippodrome": {
+          "libelleCourt": "VINCENNES",
+          "libelle": "Hippodrome de Vincennes"
         },
-        {
-          "numOrdre": 2,
-          "discipline": "TROT MONTE",
-          "heureDepart": 1708948800000,
-          "distance": 2150,
-          "etatPiste": "BON",
-          "nombreDeclaresPartants": 9
-        }
-      ]
-    },
-    {
-      "numOfficiel": 2,
-      "hippodrome": {
-        "libelleCourt": "PARIS-LONGCHAMP",
-        "libelle": "Hippodrome de Longchamp"
+        "courses": [
+          {
+            "numOrdre": 1,
+            "specialite": "TROT_ATTELE",
+            "discipline": "ATTELE",
+            "heureDepart": 1708945200000,
+            "distance": 2700,
+            "etatPiste": "BON",
+            "nombreDeclaresPartants": 12
+          },
+          {
+            "numOrdre": 2,
+            "specialite": "TROT_MONTE",
+            "discipline": "MONTE",
+            "heureDepart": 1708948800000,
+            "distance": 2150,
+            "etatPiste": "BON",
+            "nombreDeclaresPartants": 9
+          }
+        ]
       },
-      "courses": [
-        {
-          "numOrdre": 1,
-          "discipline": "PLAT",
-          "heureDepart": 1708952400000,
-          "distance": 1600,
-          "etatPiste": "SOUPLE",
-          "nombreDeclaresPartants": 15
-        }
-      ]
-    }
-  ]
+      {
+        "numOfficiel": 2,
+        "hippodrome": {
+          "libelleCourt": "PARIS-LONGCHAMP"
+        },
+        "courses": [
+          {
+            "numOrdre": 1,
+            "specialite": "PLAT",
+            "discipline": "PLAT",
+            "heureDepart": 1708952400000,
+            "distance": 1600,
+            "nombreDeclaresPartants": 15
+          }
+        ]
+      }
+    ]
+  }
 }

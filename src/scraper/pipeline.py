@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date as date_type
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from loguru import logger
@@ -11,17 +11,13 @@ from loguru import logger
 from config.settings import DB_PATH
 from src.scraper.client import PipelineError, PMUClient
 from src.scraper.parser import (
-    parse_horse_history,
     parse_odds,
-    parse_race,
     parse_reunions,
     parse_runners,
-    sanitize_horse_name,
 )
 from src.scraper.saver import save_raw
 from src.scraper.storage import (
     get_connection,
-    upsert_horse_history,
     upsert_odds,
     upsert_race,
     upsert_runners,
@@ -33,13 +29,11 @@ class PipelineResult:
     date: str
     races_fetched: int = 0
     runners_fetched: int = 0
-    horses_fetched: int = 0
     errors: list[str] = field(default_factory=list)
 
 
 def run(
     date: str | None = None,
-    fetch_horse_history: bool = True,
     db_path: Path = DB_PATH,
 ) -> PipelineResult:
     """Run the full scraping pipeline for *date* (YYYYMMDD). Defaults to today."""
@@ -49,45 +43,46 @@ def run(
     result = PipelineResult(date=date)
     conn = get_connection(db_path)
     snapshot_time = datetime.now(tz=timezone.utc)
-    fetched_horses: set[str] = set()
 
     with PMUClient() as client:
-        # ---- Step 1: fetch program ----------------------------------------
+        # ---- Step 1: fetch programme (contains race metadata + course list) ---
         try:
-            raw_reunions = client.fetch_reunions(date)
+            raw_programme = client.fetch_reunions(date)
         except PipelineError as exc:
-            msg = f"Failed to fetch reunions for {date}: {exc}"
+            msg = f"Failed to fetch programme for {date}: {exc}"
             logger.error(msg)
             result.errors.append(msg)
+            conn.close()
             return result
 
-        save_raw(raw_reunions, date, "reunions.json")
-        trot_races = parse_reunions(raw_reunions, date)
+        save_raw(raw_programme, date, "reunions.json")
+        trot_races = parse_reunions(raw_programme, date)
 
         if not trot_races:
             logger.info("No trot races found for {}.", date)
+            conn.close()
             return result
 
-        # ---- Step 2: per-race fetching -------------------------------------
-        for race_meta in trot_races:
-            r_num = race_meta.reunion_number
-            c_num = race_meta.course_number
+        # ---- Step 2: per-race participants fetch ----------------------------
+        for race in trot_races:
+            r_num = race.reunion_number
+            c_num = race.course_number
             race_filename = f"R{r_num}_C{c_num}.json"
 
             try:
-                raw_race = client.fetch_race(date, r_num, c_num)
+                raw_participants = client.fetch_race(date, r_num, c_num)
             except PipelineError as exc:
-                msg = f"Failed to fetch race R{r_num}/C{c_num} for {date}: {exc}"
+                msg = f"Failed to fetch participants R{r_num}/C{c_num} for {date}: {exc}"
                 logger.warning(msg)
                 result.errors.append(msg)
                 continue
 
-            raw_path = save_raw(raw_race, date, race_filename)
-            race = parse_race(raw_race, date, r_num, c_num, raw_file_path=str(raw_path))
-            runners = parse_runners(raw_race, race.race_id)
-            odds_list = parse_odds(raw_race, race.race_id, snapshot_time)
+            raw_path = save_raw(raw_participants, date, race_filename)
+            race.raw_file_path = str(raw_path)
 
-            # Persist
+            runners = parse_runners(raw_participants, race.race_id)
+            odds_list = parse_odds(raw_participants, race.race_id, snapshot_time)
+
             upsert_race(conn, race.__dict__)
             upsert_runners(conn, [r.__dict__ for r in runners])
             upsert_odds(conn, [o.__dict__ for o in odds_list])
@@ -95,43 +90,68 @@ def run(
             result.races_fetched += 1
             result.runners_fetched += len(runners)
 
-            # ---- Step 3: horse history -------------------------------------
-            if fetch_horse_history:
-                for runner in runners:
-                    if not runner.horse_name:
-                        continue
-                    horse_key = sanitize_horse_name(runner.horse_name)
-                    if horse_key in fetched_horses:
-                        continue
-                    fetched_horses.add(horse_key)
-
-                    horse_filename = f"horse_{horse_key}.json"
-                    try:
-                        raw_horse = client.fetch_horse(runner.horse_name)
-                    except Exception as exc:
-                        msg = f"Failed to fetch horse {runner.horse_name}: {exc}"
-                        logger.warning(msg)
-                        result.errors.append(msg)
-                        continue
-
-                    if raw_horse is None:
-                        logger.debug("No history for horse {}", runner.horse_name)
-                        continue
-
-                    save_raw(raw_horse, date, horse_filename)
-                    history_rows = parse_horse_history(
-                        raw_horse, runner.horse_name, race.race_id
-                    )
-                    upsert_horse_history(conn, [h.__dict__ for h in history_rows])
-                    result.horses_fetched += 1
-
     conn.close()
     logger.info(
-        "Pipeline complete for {}: {} races, {} runners, {} horses, {} errors",
+        "Pipeline complete for {}: {} races, {} runners, {} errors",
         date,
         result.races_fetched,
         result.runners_fetched,
-        result.horses_fetched,
         len(result.errors),
+    )
+    return result
+
+
+@dataclass
+class BackfillResult:
+    dates_attempted: int = 0
+    dates_ok: int = 0
+    total_races: int = 0
+    total_runners: int = 0
+    failed_dates: list[str] = field(default_factory=list)
+
+
+def backfill(
+    days: int = 60,
+    end_date: str | None = None,
+    db_path: Path = DB_PATH,
+) -> BackfillResult:
+    """Fetch *days* calendar days of past race data ending on *end_date* (YYYYMMDD, default: yesterday).
+
+    All writes are idempotent — safe to re-run. Past-date responses include
+    finish_position and km_time so results are stored alongside pre-race features.
+    """
+    if end_date is None:
+        end_dt = date_type.today() - timedelta(days=1)
+    else:
+        end_dt = date_type(int(end_date[:4]), int(end_date[4:6]), int(end_date[6:8]))
+
+    result = BackfillResult()
+
+    for offset in range(days - 1, -1, -1):   # oldest → newest
+        target = end_dt - timedelta(days=offset)
+        date_str = target.strftime("%Y%m%d")
+        result.dates_attempted += 1
+
+        day_result = run(date=date_str, db_path=db_path)
+
+        if day_result.errors and day_result.races_fetched == 0:
+            logger.warning("Backfill: no data for {} — {}", date_str, day_result.errors[0])
+            result.failed_dates.append(date_str)
+        else:
+            result.dates_ok += 1
+            result.total_races += day_result.races_fetched
+            result.total_runners += day_result.runners_fetched
+
+        logger.info(
+            "Backfill [{}/{}] {} — {} races, {} runners",
+            result.dates_attempted, days, date_str,
+            day_result.races_fetched, day_result.runners_fetched,
+        )
+
+    logger.info(
+        "Backfill complete: {}/{} dates OK, {} races, {} runners, {} failed",
+        result.dates_ok, result.dates_attempted,
+        result.total_races, result.total_runners,
+        len(result.failed_dates),
     )
     return result
