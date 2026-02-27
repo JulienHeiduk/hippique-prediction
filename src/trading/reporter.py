@@ -137,6 +137,18 @@ _HTML_TEMPLATE = """\
     color: #888;
     font-size: 15px;
   }}
+  .pmu-link {{
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 600;
+    color: #8ab4f8;
+    text-decoration: none;
+    white-space: nowrap;
+    border: 1px solid rgba(138,180,248,.4);
+    border-radius: 4px;
+    padding: 3px 8px;
+  }}
+  .pmu-link:hover {{ background: rgba(138,180,248,.15); }}
   .footer {{
     margin-top: 28px;
     font-size: 11px;
@@ -166,6 +178,7 @@ _RACE_BLOCK = """\
     <span class="race-meta">
       {time_span}{distance_span}{field_span}
     </span>
+    {pmu_link}
   </div>
   {bet_rows}
 </div>
@@ -189,6 +202,14 @@ _BET_ROW = """\
     </div>
   </div>
 """
+
+
+def _pmu_url(date_yyyymmdd: str, r_num: int | None, c_num: int | None) -> str | None:
+    """Build the PMU race page URL: https://www.pmu.fr/turf/DDMMYYYY/Rn/Cc/"""
+    if not r_num or not c_num:
+        return None
+    ddmmyyyy = date_yyyymmdd[6:8] + date_yyyymmdd[4:6] + date_yyyymmdd[:4]
+    return f"https://www.pmu.fr/turf/{ddmmyyyy}/R{r_num}/C{c_num}/"
 
 
 def _horse_tag(horse_num: int | None, horse_name: str | None) -> str:
@@ -318,12 +339,19 @@ def export_bets_html(
                     stake=f"{stake:.0f}",
                 )
 
+            url = _pmu_url(date, r_num, c_num)
+            pmu_link = (
+                f'<a class="pmu-link" href="{url}" target="_blank">↗ pmu.fr</a>'
+                if url else ""
+            )
+
             body_parts.append(_RACE_BLOCK.format(
                 hippodrome=hippodrome.upper() if hippodrome else "?",
                 race_ref=race_ref,
                 time_span=time_span,
                 distance_span=distance_span,
                 field_span=field_span,
+                pmu_link=pmu_link,
                 bet_rows=bet_rows_html,
             ))
 
