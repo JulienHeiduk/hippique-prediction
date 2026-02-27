@@ -325,7 +325,7 @@ def resolve_bets(
         pos1 = pos_map.get(runner_id_1)
         field_size = field_map.get(runner_id_1, 8)
 
-        if pos1 is None:
+        if pos1 is None or pd.isna(pos1):
             # Results not yet available — skip
             continue
 
@@ -343,7 +343,7 @@ def resolve_bets(
         elif bet_type == "duo":
             stake = UNIT_STAKE * 2
             pos2 = pos_map.get(runner_id_2)
-            if pos2 is None:
+            if pos2 is None or pd.isna(pos2):
                 continue
             hit = set([int(pos1), int(pos2)]) == {1, 2}
             if hit:

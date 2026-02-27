@@ -38,7 +38,7 @@ def run_morning_session(date: str | None = None) -> None:
     try:
         bets = generate_bets(conn, date)
         logger.info("=== {} bets logged for {} ===", len(bets), date)
-        report_path = export_bets_html(bets, conn, date)
+        report_path = export_bets_html(conn, date)
         logger.info("Bet sheet saved → {}", report_path)
     finally:
         conn.close()
@@ -76,6 +76,8 @@ def run_evening_session(date: str | None = None) -> None:
                 float(row["total_pnl"]),
                 float(row["roi"]),
             )
+        report_path = export_bets_html(conn, date)
+        logger.info("Bet sheet updated → {}", report_path)
     finally:
         conn.close()
 
