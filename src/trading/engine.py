@@ -303,14 +303,30 @@ def resolve_bets(
 
     placeholders = ", ".join(["?"] * len(all_runner_ids))
     runners_sql = f"""
-        SELECT ru.runner_id, ru.finish_position, ra.field_size
+        SELECT ru.runner_id, ru.race_id, ru.finish_position, ra.field_size
         FROM runners ru
         JOIN races ra ON ra.race_id = ru.race_id
         WHERE ru.runner_id IN ({placeholders})
     """
     runners_df = conn.execute(runners_sql, all_runner_ids).df()
-    pos_map = dict(zip(runners_df["runner_id"], runners_df["finish_position"]))
+    pos_map   = dict(zip(runners_df["runner_id"], runners_df["finish_position"]))
     field_map = dict(zip(runners_df["runner_id"], runners_df["field_size"]))
+
+    # Build a set of race_ids where at least one runner has a finish position
+    # (i.e. results have been published). Used to detect DAI horses.
+    race_id_map = dict(zip(runners_df["runner_id"], runners_df["race_id"]))
+    all_race_ids = list({b["race_id"] for b in pending_df.to_dict("records")})
+    finished_races: set[str] = set()
+    if all_race_ids:
+        ph2 = ", ".join(["?"] * len(all_race_ids))
+        finished_df = conn.execute(
+            f"""
+            SELECT DISTINCT race_id FROM runners
+            WHERE race_id IN ({ph2}) AND finish_position IS NOT NULL
+            """,
+            all_race_ids,
+        ).df()
+        finished_races = set(finished_df["race_id"].tolist())
 
     now = datetime.now(tz=timezone.utc)
     results = []
@@ -321,42 +337,59 @@ def resolve_bets(
         morning_odds = bet["morning_odds"]
         runner_id_1 = bet["runner_id_1"]
         runner_id_2 = bet.get("runner_id_2")
+        race_id = bet["race_id"]
 
         pos1 = pos_map.get(runner_id_1)
         field_size = field_map.get(runner_id_1, 8)
 
         if pos1 is None or pd.isna(pos1):
-            # Results not yet available — skip
-            continue
+            if race_id not in finished_races:
+                # Race results not yet published — stay pending
+                continue
+            # Race finished but horse has no position → DAI (disqualified
+            # after integration) — counts as a loss
+            logger.info("DAI detected for {} in {} — marking as lost", runner_id_1, race_id)
+            stake = UNIT_STAKE * (2 if bet_type == "duo" else 1)
+            hit = False
+            pnl = -stake
+            status = "lost"
 
-        if bet_type == "win":
+        elif bet_type == "win":
             stake = UNIT_STAKE
             hit = int(pos1) == 1
             pnl = (float(morning_odds) - 1.0) * stake if hit else -stake
+            status = "won" if hit else "lost"
 
         elif bet_type == "place":
             stake = UNIT_STAKE
             cutoff = 2 if field_size < 5 else 3
             hit = int(pos1) <= cutoff
             pnl = (float(morning_odds) / 4.0 - 1.0) * stake if hit else -stake
+            status = "won" if hit else "lost"
 
         elif bet_type == "duo":
             stake = UNIT_STAKE * 2
             pos2 = pos_map.get(runner_id_2)
             if pos2 is None or pd.isna(pos2):
-                continue
-            hit = set([int(pos1), int(pos2)]) == {1, 2}
-            if hit:
-                raw_pnl = field_size ** 2 / 4.0
-                pnl = min(raw_pnl, 50.0) - 2.0
+                if race_id not in finished_races:
+                    continue
+                # DAI on second runner
+                logger.info("DAI detected for {} in {} — marking as lost", runner_id_2, race_id)
+                hit = False
+                pnl = -stake
+                status = "lost"
             else:
-                pnl = -2.0
+                hit = set([int(pos1), int(pos2)]) == {1, 2}
+                if hit:
+                    raw_pnl = field_size ** 2 / 4.0
+                    pnl = min(raw_pnl, 50.0) - 2.0
+                else:
+                    pnl = -2.0
+                status = "won" if hit else "lost"
 
         else:
             logger.warning("Unknown bet_type {} for bet {}", bet_type, bet_id)
             continue
-
-        status = "won" if hit else "lost"
 
         # Update bet in DB (INSERT OR REPLACE = upsert)
         updated_bet = {
