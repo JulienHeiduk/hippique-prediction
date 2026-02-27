@@ -7,6 +7,7 @@ from loguru import logger
 
 from src.scraper import get_connection, run_pipeline
 from src.trading.engine import generate_bets, resolve_bets
+from src.trading.reporter import export_bets_html
 
 
 def run_morning_session(date: str | None = None) -> None:
@@ -33,6 +34,8 @@ def run_morning_session(date: str | None = None) -> None:
     try:
         bets = generate_bets(conn, date)
         logger.info("=== {} bets logged for {} ===", len(bets), date)
+        report_path = export_bets_html(bets, conn, date)
+        logger.info("Bet sheet saved → {}", report_path)
     finally:
         conn.close()
 
