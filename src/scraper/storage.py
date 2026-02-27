@@ -78,6 +78,29 @@ def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
             disqualified     BOOLEAN DEFAULT FALSE
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS bets (
+            bet_id       VARCHAR PRIMARY KEY,
+            race_id      VARCHAR NOT NULL,
+            date         VARCHAR NOT NULL,
+            hippodrome   VARCHAR,
+            bet_type     VARCHAR NOT NULL,
+            runner_id_1  VARCHAR NOT NULL,
+            runner_id_2  VARCHAR,
+            horse_name_1 VARCHAR,
+            horse_name_2 VARCHAR,
+            morning_odds DOUBLE,
+            model_prob   DOUBLE,
+            implied_prob DOUBLE,
+            ev_ratio     DOUBLE,
+            kelly_stake  DOUBLE,
+            stake        DOUBLE,
+            status       VARCHAR DEFAULT 'pending',
+            pnl          DOUBLE,
+            created_at   TIMESTAMP,
+            resolved_at  TIMESTAMP
+        )
+    """)
     logger.debug("DuckDB schema initialised (idempotent)")
 
 
@@ -167,4 +190,32 @@ def upsert_horse_history(conn: duckdb.DuckDBPyConnection, rows: list[dict]) -> N
             h.get("disqualified", False),
         ]
         for h in rows
+    ])
+
+
+def upsert_bet(conn: duckdb.DuckDBPyConnection, bet: dict) -> None:
+    conn.execute("""
+        INSERT OR REPLACE INTO bets VALUES (
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+    """, [
+        bet.get("bet_id"),
+        bet.get("race_id"),
+        bet.get("date"),
+        bet.get("hippodrome"),
+        bet.get("bet_type"),
+        bet.get("runner_id_1"),
+        bet.get("runner_id_2"),
+        bet.get("horse_name_1"),
+        bet.get("horse_name_2"),
+        bet.get("morning_odds"),
+        bet.get("model_prob"),
+        bet.get("implied_prob"),
+        bet.get("ev_ratio"),
+        bet.get("kelly_stake"),
+        bet.get("stake"),
+        bet.get("status", "pending"),
+        bet.get("pnl"),
+        bet.get("created_at"),
+        bet.get("resolved_at"),
     ])
