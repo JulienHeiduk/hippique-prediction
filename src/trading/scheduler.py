@@ -11,7 +11,11 @@ from src.trading.reporter import export_bets_html
 
 
 def run_morning_session(date: str | None = None) -> None:
-    """Run the morning pipeline: scrape today's races and log EV+ bets.
+    """Scrape today's races, log EV+ bets, and export the HTML bet sheet.
+
+    Called twice by the scheduler (09:00 and 11:30) so that reference odds
+    published close to each race's post time are captured before the bet
+    sheet is finalised. Both runs are fully idempotent (INSERT OR REPLACE).
 
     Args:
         date: YYYYMMDD string. Defaults to today.
@@ -77,12 +81,20 @@ def run_evening_session(date: str | None = None) -> None:
 
 
 def start_scheduler() -> None:
-    """Start the APScheduler with 09:00 morning + 22:00 evening daily jobs."""
+    """Start the APScheduler with three daily jobs.
+
+    Schedule:
+      09:00 — first morning scrape (programme + early odds)
+      11:30 — second morning scrape (fills in reference odds published
+               closer to post time; regenerates the final HTML bet sheet)
+      22:00 — evening scrape (results + P&L resolution)
+    """
     from apscheduler.schedulers.blocking import BlockingScheduler
 
     scheduler = BlockingScheduler()
-    scheduler.add_job(run_morning_session, "cron", hour=9, minute=0)
+    scheduler.add_job(run_morning_session, "cron", hour=9,  minute=0)
+    scheduler.add_job(run_morning_session, "cron", hour=11, minute=30)
     scheduler.add_job(run_evening_session, "cron", hour=22, minute=0)
 
-    logger.info("Scheduler starting — morning @ 09:00, evening @ 22:00")
+    logger.info("Scheduler starting — 09:00 / 11:30 morning, 22:00 evening")
     scheduler.start()
