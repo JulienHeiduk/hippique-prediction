@@ -312,6 +312,15 @@ def resolve_bets(
     pos_map   = dict(zip(runners_df["runner_id"], runners_df["finish_position"]))
     field_map = dict(zip(runners_df["runner_id"], runners_df["field_size"]))
 
+    # Final odds fallback: used when morning_odds is NULL (e.g. R7 late races)
+    final_odds_sql = f"""
+        SELECT runner_id, decimal_odds
+        FROM odds
+        WHERE runner_id IN ({placeholders}) AND odds_type = 'final'
+    """
+    final_odds_df = conn.execute(final_odds_sql, all_runner_ids).df()
+    final_odds_map = dict(zip(final_odds_df["runner_id"], final_odds_df["decimal_odds"]))
+
     # Build a set of race_ids where at least one runner has a finish position
     # (i.e. results have been published). Used to detect DAI horses.
     race_id_map = dict(zip(runners_df["runner_id"], runners_df["race_id"]))
@@ -357,14 +366,25 @@ def resolve_bets(
         elif bet_type == "win":
             stake = UNIT_STAKE
             hit = int(pos1) == 1
-            pnl = (float(morning_odds) - 1.0) * stake if hit else -stake
+            # Fall back to final_odds when morning_odds was not available at scrape time
+            odds = morning_odds if (morning_odds is not None and not pd.isna(morning_odds)) \
+                else final_odds_map.get(runner_id_1)
+            if hit and odds is not None:
+                pnl = (float(odds) - 1.0) * stake
+            else:
+                pnl = -stake
             status = "won" if hit else "lost"
 
         elif bet_type == "place":
             stake = UNIT_STAKE
             cutoff = 2 if field_size < 5 else 3
             hit = int(pos1) <= cutoff
-            pnl = (float(morning_odds) / 4.0 - 1.0) * stake if hit else -stake
+            odds = morning_odds if (morning_odds is not None and not pd.isna(morning_odds)) \
+                else final_odds_map.get(runner_id_1)
+            if hit and odds is not None:
+                pnl = (float(odds) / 4.0 - 1.0) * stake
+            else:
+                pnl = -stake
             status = "won" if hit else "lost"
 
         elif bet_type == "duo":
@@ -382,14 +402,18 @@ def resolve_bets(
                 hit = set([int(pos1), int(pos2)]) == {1, 2}
                 if hit:
                     raw_pnl = field_size ** 2 / 4.0
-                    pnl = min(raw_pnl, 50.0) - 2.0
+                    pnl = min(raw_pnl, 50.0) - stake
                 else:
-                    pnl = -2.0
+                    pnl = -stake
                 status = "won" if hit else "lost"
 
         else:
             logger.warning("Unknown bet_type {} for bet {}", bet_type, bet_id)
             continue
+
+        # Resolve the effective odds used for P&L (morning_odds or final_odds fallback)
+        effective_odds = morning_odds if (morning_odds is not None and not pd.isna(morning_odds)) \
+            else final_odds_map.get(runner_id_1)
 
         # Update bet in DB (INSERT OR REPLACE = upsert)
         updated_bet = {
@@ -402,7 +426,7 @@ def resolve_bets(
             "runner_id_2": runner_id_2,
             "horse_name_1": bet.get("horse_name_1"),
             "horse_name_2": bet.get("horse_name_2"),
-            "morning_odds": morning_odds,
+            "morning_odds": effective_odds,
             "model_prob": bet.get("model_prob"),
             "implied_prob": bet.get("implied_prob"),
             "ev_ratio": bet.get("ev_ratio"),

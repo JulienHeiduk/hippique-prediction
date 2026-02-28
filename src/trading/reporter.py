@@ -181,6 +181,16 @@ _HTML_TEMPLATE = """\
   .ev {{ font-weight: 700; }}
   .ev-high {{ color: #2e7d32; }}
   .ev-mid  {{ color: #e65100; }}
+  /* ── Odds completeness tag ── */
+  .odds-tag {{
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }}
+  .odds-ok      {{ background: rgba(46,125,50,.25);  color: #a5d6a7; }}
+  .odds-missing {{ background: rgba(230,81,0,.30);   color: #ffcc80; }}
   /* ── Stake / P&L column ── */
   .stake-col {{
     text-align: right;
@@ -237,6 +247,7 @@ _RACE_BLOCK = """\
     <span class="race-meta">
       {time_span}{distance_span}{field_span}
     </span>
+    {odds_tag}
     {pmu_link}
   </div>
   {bet_rows}
@@ -337,7 +348,28 @@ def export_bets_html(
         for _, row in rows.iterrows():
             race_meta[row["race_id"]] = row.to_dict()
 
-    # ── 3. Finish positions for all runners today ───────────────────────────
+    # ── 3. Missing morning odds count per race ──────────────────────────────
+    missing_odds: dict[str, int] = {}
+    if race_ids:
+        placeholders = ", ".join(["?"] * len(race_ids))
+        odds_cov = conn.execute(
+            f"""
+            SELECT ru.race_id,
+                   COUNT(DISTINCT ru.runner_id)                          AS total_runners,
+                   COUNT(DISTINCT CASE WHEN o.odds_type = 'morning'
+                                       THEN o.runner_id END)             AS runners_with_odds
+            FROM runners ru
+            LEFT JOIN odds o ON o.runner_id = ru.runner_id
+            WHERE ru.race_id IN ({placeholders})
+              AND ru.scratch = FALSE
+            GROUP BY ru.race_id
+            """,
+            race_ids,
+        ).df()
+        for _, row in odds_cov.iterrows():
+            missing_odds[row["race_id"]] = int(row["total_runners"]) - int(row["runners_with_odds"])
+
+    # ── 4. Finish positions for all runners today ───────────────────────────
     # runner_id → {finish_position, horse_name}
     finish_info: dict[str, dict] = {}
     # race_id → winner horse_name (finish_position = 1)
@@ -363,7 +395,7 @@ def export_bets_html(
             except (TypeError, ValueError):
                 pass
 
-    # ── 4. Summary stats ────────────────────────────────────────────────────
+    # ── 5. Summary stats ────────────────────────────────────────────────────
     n_total   = len(bets)
     n_won     = sum(1 for b in bets if b.get("status") == "won")
     n_lost    = sum(1 for b in bets if b.get("status") == "lost")
@@ -391,7 +423,7 @@ def export_bets_html(
             cards.append(_card(f"{roi:+.0%}", "ROI", roi_class))
         summary_html = '<div class="summary">' + "".join(cards) + "</div>"
 
-    # ── 5. Group bets by race ───────────────────────────────────────────────
+    # ── 6. Group bets by race ───────────────────────────────────────────────
     races_seen: list[str] = []
     bets_by_race: dict[str, list[dict]] = {}
     for b in bets:
@@ -401,7 +433,7 @@ def export_bets_html(
             bets_by_race[rid] = []
         bets_by_race[rid].append(b)
 
-    # ── 6. Build HTML body ──────────────────────────────────────────────────
+    # ── 7. Build HTML body ──────────────────────────────────────────────────
     body_parts: list[str] = []
 
     if not bets:
@@ -434,6 +466,12 @@ def export_bets_html(
                 f'<a class="pmu-link" href="{url}" target="_blank">↗ pmu.fr</a>'
                 if url else ""
             )
+
+            n_missing = missing_odds.get(race_id, 0)
+            if n_missing == 0:
+                odds_tag = '<span class="odds-tag odds-ok">✓ Cotes complètes</span>'
+            else:
+                odds_tag = f'<span class="odds-tag odds-missing">⚠ {n_missing} cote{"s" if n_missing > 1 else ""} manquante{"s" if n_missing > 1 else ""}</span>'
 
             bet_rows_html = ""
             for b in bets_by_race[race_id]:
@@ -517,6 +555,7 @@ def export_bets_html(
                 time_span=time_span,
                 distance_span=distance_span,
                 field_span=field_span,
+                odds_tag=odds_tag,
                 pmu_link=pmu_link,
                 bet_rows=bet_rows_html,
             ))
