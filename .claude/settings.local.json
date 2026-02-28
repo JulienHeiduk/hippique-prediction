@@ -15,7 +15,8 @@
       "Bash(mkdir:*)",
       "Bash(PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe:*)",
       "Skill(commit-helper)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git:*)"
     ]
   }
 }
