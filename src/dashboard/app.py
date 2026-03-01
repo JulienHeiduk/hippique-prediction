@@ -1,8 +1,15 @@
 """Streamlit dashboard — PMU Hippique Paper Trading."""
 from __future__ import annotations
 
+import sys
 from datetime import date, datetime
 from pathlib import Path
+
+# Ensure project root is on sys.path (required on Streamlit Cloud where only
+# the app's own directory is added automatically).
+_ROOT = Path(__file__).parent.parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 import streamlit as st
 import streamlit.components.v1 as components
