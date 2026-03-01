@@ -1,7 +1,9 @@
 """APScheduler-based daily pipeline: morning scrape + bet generation, evening resolution."""
 from __future__ import annotations
 
+import subprocess
 from datetime import datetime
+from pathlib import Path
 
 from loguru import logger
 
@@ -10,12 +12,39 @@ from src.trading.engine import generate_bets, resolve_bets
 from src.trading.reporter import export_bets_html
 
 
-def run_morning_session(date: str | None = None) -> None:
-    """Scrape today's races, log EV+ bets, and export the HTML bet sheet.
+def _git_push(path: Path) -> None:
+    """Stage *path*, commit, and push to the remote origin.
 
-    Called twice by the scheduler (09:00 and 11:30) so that reference odds
-    published close to each race's post time are captured before the bet
-    sheet is finalised. Both runs are fully idempotent (INSERT OR REPLACE).
+    If nothing changed (git diff --cached is empty) the commit step is
+    skipped.  Errors are logged as warnings so the scheduler keeps running
+    even if git is unavailable or the remote is unreachable.
+    """
+    try:
+        subprocess.run(["git", "add", str(path)], check=True, capture_output=True)
+
+        # Skip commit when there is nothing new to record
+        cached = subprocess.run(
+            ["git", "diff", "--cached", "--quiet"],
+            capture_output=True,
+        )
+        if cached.returncode == 0:
+            logger.debug("git: no changes in {} — skipping commit", path.name)
+            return
+
+        date_label = path.stem.replace("bets_", "")
+        msg = f"chore(data): update {date_label} bet sheet"
+        subprocess.run(["git", "commit", "-m", msg], check=True, capture_output=True)
+        subprocess.run(["git", "push"], check=True, capture_output=True)
+        logger.info("git: pushed {} to GitHub", path.name)
+    except subprocess.CalledProcessError as exc:
+        stderr = (exc.stderr or b"").decode(errors="replace").strip()
+        logger.warning("git push failed: {}", stderr or exc)
+    except Exception as exc:
+        logger.warning("git push error: {}", exc)
+
+
+def run_morning_session(date: str | None = None) -> None:
+    """Scrape today's races, log EV+ bets, export the HTML bet sheet, and push to GitHub.
 
     Args:
         date: YYYYMMDD string. Defaults to today.
@@ -25,7 +54,6 @@ def run_morning_session(date: str | None = None) -> None:
 
     logger.info("=== Morning session starting for {} ===", date)
 
-    # Scrape today's races (pipeline.run() accepts YYYYMMDD)
     pipeline_result = run_pipeline(date)
     logger.info(
         "Scraper: {} races, {} runners, {} errors",
@@ -40,12 +68,47 @@ def run_morning_session(date: str | None = None) -> None:
         logger.info("=== {} bets logged for {} ===", len(bets), date)
         report_path = export_bets_html(conn, date)
         logger.info("Bet sheet saved → {}", report_path)
+        _git_push(report_path)
+    finally:
+        conn.close()
+
+
+def run_hourly_update(date: str | None = None) -> None:
+    """Re-scrape odds, refresh bet recommendations, update the HTML sheet, and push to GitHub.
+
+    Called every hour between 10:00 and 22:00 so that odds drifts and any
+    late-programme races are picked up progressively during the day.
+    The operation is fully idempotent — resolved bets are never overwritten.
+
+    Args:
+        date: YYYYMMDD string. Defaults to today.
+    """
+    if date is None:
+        date = datetime.today().strftime("%Y%m%d")
+
+    logger.info("=== Hourly update starting for {} ===", date)
+
+    pipeline_result = run_pipeline(date)
+    logger.info(
+        "Scraper: {} races, {} runners, {} errors",
+        pipeline_result.races_fetched,
+        pipeline_result.runners_fetched,
+        len(pipeline_result.errors),
+    )
+
+    conn = get_connection()
+    try:
+        bets = generate_bets(conn, date)
+        logger.info("{} bets refreshed for {}", len(bets), date)
+        report_path = export_bets_html(conn, date)
+        logger.info("Bet sheet updated → {}", report_path)
+        _git_push(report_path)
     finally:
         conn.close()
 
 
 def run_evening_session(date: str | None = None) -> None:
-    """Run the evening pipeline: scrape results and resolve pending bets.
+    """Scrape results, resolve pending bets, update the HTML sheet, and push to GitHub.
 
     Args:
         date: YYYYMMDD string. Defaults to today.
@@ -55,7 +118,6 @@ def run_evening_session(date: str | None = None) -> None:
 
     logger.info("=== Evening session starting for {} ===", date)
 
-    # Re-scrape to pull in finish_position (results available after races)
     pipeline_result = run_pipeline(date)
     logger.info(
         "Scraper: {} races, {} runners, {} errors",
@@ -78,25 +140,33 @@ def run_evening_session(date: str | None = None) -> None:
             )
         report_path = export_bets_html(conn, date)
         logger.info("Bet sheet updated → {}", report_path)
+        _git_push(report_path)
     finally:
         conn.close()
 
 
 def start_scheduler() -> None:
-    """Start the APScheduler with three daily jobs.
+    """Start the APScheduler with daily jobs.
 
-    Schedule:
-      09:00 — first morning scrape (programme + early odds)
-      11:30 — second morning scrape (fills in reference odds published
-               closer to post time; regenerates the final HTML bet sheet)
-      22:00 — evening scrape (results + P&L resolution)
+    Schedule (all times local):
+      08:30        — morning scrape (programme + early odds) → GitHub push
+      10:00–22:00  — hourly odds refresh + bet regen         → GitHub push
+      22:30        — evening scrape (results + P&L)          → GitHub push
     """
     from apscheduler.schedulers.blocking import BlockingScheduler
 
     scheduler = BlockingScheduler()
-    scheduler.add_job(run_morning_session, "cron", hour=9,  minute=0)
-    scheduler.add_job(run_morning_session, "cron", hour=11, minute=30)
-    scheduler.add_job(run_evening_session, "cron", hour=22, minute=0)
 
-    logger.info("Scheduler starting — 09:00 / 11:30 morning, 22:00 evening")
+    # Morning: single run at 08:30 (odds not yet stable before that)
+    scheduler.add_job(run_morning_session, "cron", hour=8, minute=30)
+
+    # Hourly refresh from 10:00 to 22:00 inclusive (13 runs)
+    scheduler.add_job(run_hourly_update, "cron", hour="10-22", minute=0)
+
+    # Evening resolution at 22:30 (results published ~22:00)
+    scheduler.add_job(run_evening_session, "cron", hour=22, minute=30)
+
+    logger.info(
+        "Scheduler starting — 08:30 morning / 10:00–22:00 hourly / 22:30 evening"
+    )
     scheduler.start()
