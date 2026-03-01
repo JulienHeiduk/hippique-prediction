@@ -14,9 +14,13 @@ if str(_ROOT) not in sys.path:
 import streamlit as st
 import streamlit.components.v1 as components
 
-from config.settings import ROOT
+from config.settings import DB_PATH, ROOT
 
 REPORTS_DIR = ROOT / "data" / "reports"
+
+# True only when the DuckDB file exists locally; False on Streamlit Cloud
+# where data/processed/ is gitignored.
+_db_available: bool = DB_PATH.exists()
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -32,6 +36,10 @@ with st.sidebar:
     date_str: str = selected_date.strftime("%Y%m%d")
     st.caption(f"Date sélectionnée : **{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}**")
     st.divider()
+    if _db_available:
+        st.success("🟢 Mode local — pipeline actif")
+    else:
+        st.info("👁 Mode lecture seule\nBase de données absente (Streamlit Cloud)")
     st.caption("Paper trading uniquement — Trot PMU")
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -73,6 +81,15 @@ tab_pipeline, tab_html = st.tabs(["⚙️ Pipeline", "📄 Fiche HTML"])
 # ── Tab 1 — Pipeline ──────────────────────────────────────────────────────────
 with tab_pipeline:
     st.header("Sessions quotidiennes")
+
+    if not _db_available:
+        st.warning(
+            "⚠️ **Mode lecture seule** — la base de données locale est absente.\n\n"
+            "Le pipeline ne peut pas tourner ici. Lancez les sessions sur votre machine, "
+            "commitez les fiches HTML générées dans `data/reports/`, puis pushez — "
+            "elles apparaîtront automatiquement dans l'onglet **📄 Fiche HTML**."
+        )
+
     st.markdown(
         "Sélectionnez la date dans la barre latérale puis lancez la session correspondante."
     )
@@ -82,7 +99,12 @@ with tab_pipeline:
     with col1:
         st.subheader("🌅 Session Matin")
         st.caption("Scraping programme + génération des paris EV+ + HTML")
-        if st.button("Lancer la session du matin", key="btn_morning", use_container_width=True):
+        if st.button(
+            "Lancer la session du matin",
+            key="btn_morning",
+            use_container_width=True,
+            disabled=not _db_available,
+        ):
             with st.spinner("Scraping + génération des paris…"):
                 from src.trading.scheduler import run_morning_session
                 logs, err = _run_capturing_logs(run_morning_session, date_str)
@@ -91,7 +113,12 @@ with tab_pipeline:
     with col2:
         st.subheader("🔄 Mise à jour")
         st.caption("Résultats partiels + cotes actualisées + HTML")
-        if st.button("Lancer la mise à jour", key="btn_update", use_container_width=True):
+        if st.button(
+            "Lancer la mise à jour",
+            key="btn_update",
+            use_container_width=True,
+            disabled=not _db_available,
+        ):
             with st.spinner("Re-scraping + résolution + génération HTML…"):
                 from src.scraper import get_connection, run_pipeline
                 from src.trading.engine import generate_bets, resolve_bets
@@ -113,7 +140,12 @@ with tab_pipeline:
     with col3:
         st.subheader("🌙 Session Soir")
         st.caption("Résultats finaux + résolution des paris + P&L")
-        if st.button("Lancer la session du soir", key="btn_evening", use_container_width=True):
+        if st.button(
+            "Lancer la session du soir",
+            key="btn_evening",
+            use_container_width=True,
+            disabled=not _db_available,
+        ):
             with st.spinner("Scraping résultats + résolution des paris…"):
                 from src.trading.scheduler import run_evening_session
                 logs, err = _run_capturing_logs(run_evening_session, date_str)
@@ -127,10 +159,16 @@ with tab_html:
     html_files = sorted(REPORTS_DIR.glob("bets_*.html"), reverse=True) if REPORTS_DIR.exists() else []
 
     if not html_files:
-        st.info(
-            "Aucune fiche disponible. "
-            "Lancez d'abord une session depuis l'onglet **⚙️ Pipeline** pour en générer une."
-        )
+        if _db_available:
+            st.info(
+                "Aucune fiche disponible. "
+                "Lancez d'abord une session depuis l'onglet **⚙️ Pipeline** pour en générer une."
+            )
+        else:
+            st.info(
+                "Aucune fiche disponible. "
+                "Générez les fiches sur votre machine locale et commitez-les dans `data/reports/`."
+            )
     else:
         def _label(p: Path) -> str:
             stem = p.stem.replace("bets_", "")
