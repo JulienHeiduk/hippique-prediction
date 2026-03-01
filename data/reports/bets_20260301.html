@@ -1,0 +1,1879 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Paris PMU — 01/03/2026</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+    font-size: 14px;
+    background: #f4f5f7;
+    color: #1a1a2e;
+    padding: 24px 16px;
+  }
+  h1 {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 6px;
+    color: #1a1a2e;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: #666;
+    margin-bottom: 16px;
+  }
+  /* ── Summary bar ── */
+  .summary {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+  }
+  .summary-card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 12px 18px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    min-width: 110px;
+  }
+  .summary-card .val {
+    font-size: 22px;
+    font-weight: 700;
+    color: #1a1a2e;
+  }
+  .summary-card .lbl {
+    font-size: 11px;
+    color: #888;
+    margin-top: 2px;
+  }
+  .val-pos { color: #2e7d32 !important; }
+  .val-neg { color: #c62828 !important; }
+  /* ── Race blocks ── */
+  .race-block {
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.10);
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .race-header {
+    background: #1a1a2e;
+    color: #fff;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .race-ref {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: .5px;
+  }
+  .race-meta {
+    font-size: 12px;
+    color: #aab;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .race-meta span::before { content: "·"; margin-right: 6px; }
+  .race-meta span:first-child::before { content: ""; margin-right: 0; }
+  .pmu-link {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 600;
+    color: #8ab4f8;
+    text-decoration: none;
+    white-space: nowrap;
+    border: 1px solid rgba(138,180,248,.4);
+    border-radius: 4px;
+    padding: 3px 8px;
+  }
+  .pmu-link:hover { background: rgba(138,180,248,.15); }
+  /* ── Bet rows ── */
+  .bet-row {
+    border-top: 1px solid #eef0f4;
+    padding: 14px 16px;
+    display: grid;
+    grid-template-columns: 90px 1fr auto;
+    gap: 10px;
+    align-items: start;
+  }
+  .bet-row.row-won  { background: #f1faf2; }
+  .bet-row.row-lost { background: #fff8f8; }
+  .badge {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 5px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .8px;
+    text-transform: uppercase;
+  }
+  .badge-win   { background: #e8f5e9; color: #2e7d32; }
+  .badge-duo   { background: #e3f2fd; color: #1565c0; }
+  .badge-place { background: #fff8e1; color: #e65100; }
+  .status-badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .6px;
+    text-transform: uppercase;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .status-won     { background: #2e7d32; color: #fff; }
+  .status-lost    { background: #c62828; color: #fff; }
+  .status-pending { background: #757575; color: #fff; }
+  .horse-line {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1a1a2e;
+    margin-bottom: 3px;
+  }
+  .horse-num {
+    display: inline-block;
+    background: #1a1a2e;
+    color: #fff;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 13px;
+    font-weight: 700;
+    margin-right: 6px;
+  }
+  .bet-stats {
+    font-size: 12px;
+    color: #555;
+    margin-top: 4px;
+  }
+  .bet-stats span { margin-right: 12px; }
+  .result-line {
+    font-size: 12px;
+    margin-top: 5px;
+    color: #444;
+  }
+  .finish-pos {
+    font-weight: 700;
+  }
+  .winner-name {
+    color: #2e7d32;
+    font-weight: 600;
+  }
+  .ev { font-weight: 700; }
+  .ev-high { color: #2e7d32; }
+  .ev-mid  { color: #e65100; }
+  /* ── Odds completeness tag ── */
+  .odds-tag {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+  .odds-ok      { background: rgba(46,125,50,.25);  color: #a5d6a7; }
+  .odds-missing { background: rgba(230,81,0,.30);   color: #ffcc80; }
+  /* ── Stake / P&L column ── */
+  .stake-col {
+    text-align: right;
+    white-space: nowrap;
+  }
+  .stake-amount {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1a1a2e;
+  }
+  .pnl-pos { font-size: 18px; font-weight: 700; color: #2e7d32; }
+  .pnl-neg { font-size: 18px; font-weight: 700; color: #c62828; }
+  .stake-label { font-size: 11px; color: #888; }
+  /* ── Empty state ── */
+  .no-bets {
+    background: #fff;
+    border-radius: 10px;
+    padding: 32px;
+    text-align: center;
+    color: #888;
+    font-size: 15px;
+  }
+  .footer {
+    margin-top: 28px;
+    font-size: 11px;
+    color: #aaa;
+    text-align: center;
+  }
+  @media print {
+    body { background: #fff; padding: 8px; }
+    .race-block { box-shadow: none; border: 1px solid #ccc; }
+    .race-header { background: #333 !important; -webkit-print-color-adjust: exact; }
+    .bet-row.row-won  { background: #f1faf2 !important; -webkit-print-color-adjust: exact; }
+    .bet-row.row-lost { background: #fff8f8 !important; -webkit-print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<h1>Paris du jour — 01/03/2026</h1>
+<p class="subtitle">Généré le 01/03/2026 10:09</p>
+<div class="summary"><div class="summary-card"><div class="val ">63</div><div class="lbl">paris total</div></div><div class="summary-card"><div class="val ">0/0</div><div class="lbl">gagnés</div></div><div class="summary-card"><div class="val ">63</div><div class="lbl">en attente</div></div><div class="summary-card"><div class="val ">188.0 €</div><div class="lbl">budget du jour</div></div><div class="summary-card"><div class="val val-pos">+0.0 €</div><div class="lbl">P&amp;L</div></div></div>
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">SON PARDO · R3·C1</span>
+    <span class="race-meta">
+      <span>11:14</span><span>2650 m</span><span>9 partants</span>
+    </span>
+    <span class="odds-tag odds-ok">✓ Cotes complètes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R3/C1/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#8</span>MON AMI  +  <span class="horse-num">#1</span>MOET DE FONT</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>4.30</strong></span>
+        <span>Modèle : <strong>34%</strong></span>
+        <span>Marché : <strong>31%</strong></span>
+        <span class="ev ev-mid">EV 1.09</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">SON PARDO · R3·C4</span>
+    <span class="race-meta">
+      <span>12:50</span><span>2650 m</span><span>10 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 2 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R3/C4/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#8</span>KIKO HP</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>12.00</strong></span>
+        <span>Modèle : <strong>14%</strong></span>
+        <span>Marché : <strong>7%</strong></span>
+        <span class="ev ev-high">EV 1.92</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">AGEN LA GARENNE · R10·C1</span>
+    <span class="race-meta">
+      <span>13:55</span><span>2575 m</span><span>15 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 15 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R10/C1/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#4</span>MANU DUEM  +  <span class="horse-num">#2</span>MYSTIQUE ULTRA</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>16%</strong></span>
+        <span>Marché : <strong>13%</strong></span>
+        <span class="ev ev-mid">EV 1.21</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#4</span>MANU DUEM</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>8%</strong></span>
+        <span>Marché : <strong>7%</strong></span>
+        <span class="ev ev-mid">EV 1.21</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">REIMS · R13·C1</span>
+    <span class="race-meta">
+      <span>14:00</span><span>2550 m</span><span>15 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 15 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R13/C1/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#3</span>LENNY DU PONT  +  <span class="horse-num">#8</span>LABEL DADDY</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>17%</strong></span>
+        <span>Marché : <strong>13%</strong></span>
+        <span class="ev ev-mid">EV 1.28</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#3</span>LENNY DU PONT</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>9%</strong></span>
+        <span>Marché : <strong>7%</strong></span>
+        <span class="ev ev-high">EV 1.35</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">CHARTRES · R15·C1</span>
+    <span class="race-meta">
+      <span>14:00</span><span>2300 m</span><span>12 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 12 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R15/C1/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#11</span>NAIADE JAYF  +  <span class="horse-num">#12</span>NUANCE D'ESPOIR</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>34%</strong></span>
+        <span>Marché : <strong>17%</strong></span>
+        <span class="ev ev-high">EV 2.02</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#11</span>NAIADE JAYF</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>18%</strong></span>
+        <span>Marché : <strong>8%</strong></span>
+        <span class="ev ev-high">EV 2.14</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">CHERBOURG · R16·C1</span>
+    <span class="race-meta">
+      <span>14:00</span><span>2625 m</span><span>12 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 12 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R16/C1/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#10</span>NINA JAVO  +  <span class="horse-num">#11</span>NELLY DE CLARAFLOR</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>30%</strong></span>
+        <span>Marché : <strong>17%</strong></span>
+        <span class="ev ev-high">EV 1.78</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#10</span>NINA JAVO</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>15%</strong></span>
+        <span>Marché : <strong>8%</strong></span>
+        <span class="ev ev-high">EV 1.85</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">AGEN LA GARENNE · R10·C2</span>
+    <span class="race-meta">
+      <span>14:25</span><span>2625 m</span><span>16 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 16 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R10/C2/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#15</span>LAGHERTHA DU PONT  +  <span class="horse-num">#14</span>L'ETOILE DE PAME</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>16%</strong></span>
+        <span>Marché : <strong>12%</strong></span>
+        <span class="ev ev-mid">EV 1.30</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#15</span>LAGHERTHA DU PONT</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>9%</strong></span>
+        <span>Marché : <strong>6%</strong></span>
+        <span class="ev ev-high">EV 1.45</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">CAVAILLON · R11·C3</span>
+    <span class="race-meta">
+      <span>14:30</span><span>2600 m</span><span>16 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 16 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R11/C3/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#15</span>MELINE DE MONGOCHY  +  <span class="horse-num">#10</span>MERVEILLE DE BOISE</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>16%</strong></span>
+        <span>Marché : <strong>12%</strong></span>
+        <span class="ev ev-high">EV 1.31</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#15</span>MELINE DE MONGOCHY</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>9%</strong></span>
+        <span>Marché : <strong>6%</strong></span>
+        <span class="ev ev-high">EV 1.37</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">REIMS · R13·C2</span>
+    <span class="race-meta">
+      <span>14:30</span><span>2550 m</span><span>10 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 10 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R13/C2/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#10</span>NINA SIMONE  +  <span class="horse-num">#6</span>NUANCE DU GRIPPON</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>34%</strong></span>
+        <span>Marché : <strong>20%</strong></span>
+        <span class="ev ev-high">EV 1.71</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#10</span>NINA SIMONE</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>23%</strong></span>
+        <span>Marché : <strong>10%</strong></span>
+        <span class="ev ev-high">EV 2.32</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">CHARTRES · R15·C2</span>
+    <span class="race-meta">
+      <span>14:30</span><span>2800 m</span><span>11 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 11 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R15/C2/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#9</span>LOVIOU JOSSELYN  +  <span class="horse-num">#5</span>LOVA DE FROMENTEL</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>24%</strong></span>
+        <span>Marché : <strong>18%</strong></span>
+        <span class="ev ev-high">EV 1.31</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#9</span>LOVIOU JOSSELYN</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>12%</strong></span>
+        <span>Marché : <strong>9%</strong></span>
+        <span class="ev ev-high">EV 1.37</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">CHERBOURG · R16·C2</span>
+    <span class="race-meta">
+      <span>14:30</span><span>2625 m</span><span>18 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 18 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R16/C2/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#18</span>MEC DE MUTRECY  +  <span class="horse-num">#15</span>MAJOR DE TOUCHYVON</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>16%</strong></span>
+        <span>Marché : <strong>11%</strong></span>
+        <span class="ev ev-high">EV 1.42</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#18</span>MEC DE MUTRECY</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>8%</strong></span>
+        <span>Marché : <strong>6%</strong></span>
+        <span class="ev ev-high">EV 1.45</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">AGEN LA GARENNE · R10·C3</span>
+    <span class="race-meta">
+      <span>14:55</span><span>2625 m</span><span>16 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 15 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R10/C3/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#16</span>LIBERTANGO  +  <span class="horse-num">#9</span>LUZ JELOCA</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>17%</strong></span>
+        <span>Marché : <strong>13%</strong></span>
+        <span class="ev ev-mid">EV 1.30</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#16</span>LIBERTANGO</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>9%</strong></span>
+        <span>Marché : <strong>7%</strong></span>
+        <span class="ev ev-high">EV 1.33</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">REIMS · R13·C3</span>
+    <span class="race-meta">
+      <span>15:00</span><span>2550 m</span><span>13 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 13 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R13/C3/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#12</span>LUDIVINE DE BAILLY  +  <span class="horse-num">#7</span>LADY DES VALOIS</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>18%</strong></span>
+        <span>Marché : <strong>15%</strong></span>
+        <span class="ev ev-mid">EV 1.19</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#12</span>LUDIVINE DE BAILLY</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>10%</strong></span>
+        <span>Marché : <strong>8%</strong></span>
+        <span class="ev ev-mid">EV 1.27</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">CHARTRES · R15·C3</span>
+    <span class="race-meta">
+      <span>15:00</span><span>2800 m</span><span>14 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 14 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R15/C3/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#6</span>LOVELY FOUTEAU  +  <span class="horse-num">#14</span>LIA DE LA MORTRIE</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>19%</strong></span>
+        <span>Marché : <strong>14%</strong></span>
+        <span class="ev ev-high">EV 1.34</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#6</span>LOVELY FOUTEAU</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>10%</strong></span>
+        <span>Marché : <strong>7%</strong></span>
+        <span class="ev ev-high">EV 1.35</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">CHERBOURG · R16·C3</span>
+    <span class="race-meta">
+      <span>15:00</span><span>2625 m</span><span>10 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 10 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R16/C3/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#9</span>MAGIC BOEING  +  <span class="horse-num">#8</span>MARGELLO BELLO</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>32%</strong></span>
+        <span>Marché : <strong>20%</strong></span>
+        <span class="ev ev-high">EV 1.60</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#9</span>MAGIC BOEING</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>17%</strong></span>
+        <span>Marché : <strong>10%</strong></span>
+        <span class="ev ev-high">EV 1.71</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">AGEN LA GARENNE · R10·C4</span>
+    <span class="race-meta">
+      <span>15:25</span><span>2625 m</span><span>10 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 10 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R10/C4/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#5</span>JOUR DE JUIN  +  <span class="horse-num">#8</span>IN THE MOOD GEDE</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>26%</strong></span>
+        <span>Marché : <strong>20%</strong></span>
+        <span class="ev ev-mid">EV 1.28</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#5</span>JOUR DE JUIN</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>14%</strong></span>
+        <span>Marché : <strong>10%</strong></span>
+        <span class="ev ev-high">EV 1.38</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">CAVAILLON · R11·C5</span>
+    <span class="race-meta">
+      <span>15:30</span><span>2600 m</span><span>11 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 11 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R11/C5/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#7</span>LE MARGINAL  +  <span class="horse-num">#1</span>LET'S GO D'AIRZA</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>20%</strong></span>
+        <span>Marché : <strong>18%</strong></span>
+        <span class="ev ev-mid">EV 1.13</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#7</span>LE MARGINAL</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>10%</strong></span>
+        <span>Marché : <strong>9%</strong></span>
+        <span class="ev ev-mid">EV 1.15</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">REIMS · R13·C4</span>
+    <span class="race-meta">
+      <span>15:30</span><span>2500 m</span><span>9 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 9 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R13/C4/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#5</span>JARDYLAND  +  <span class="horse-num">#7</span>JIMBO SPORT</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>26%</strong></span>
+        <span>Marché : <strong>22%</strong></span>
+        <span class="ev ev-mid">EV 1.19</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#5</span>JARDYLAND</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>14%</strong></span>
+        <span>Marché : <strong>11%</strong></span>
+        <span class="ev ev-mid">EV 1.24</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">CHARTRES · R15·C4</span>
+    <span class="race-meta">
+      <span>15:30</span><span>2825 m</span><span>14 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 14 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R15/C4/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#5</span>KOMELE  +  <span class="horse-num">#10</span>IGOR DES CAILLONS</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>17%</strong></span>
+        <span>Marché : <strong>14%</strong></span>
+        <span class="ev ev-mid">EV 1.19</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#5</span>KOMELE</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>9%</strong></span>
+        <span>Marché : <strong>7%</strong></span>
+        <span class="ev ev-mid">EV 1.19</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">CHERBOURG · R16·C4</span>
+    <span class="race-meta">
+      <span>15:30</span><span>2625 m</span><span>16 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 16 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R16/C4/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#10</span>KELIA DES TOUCHES  +  <span class="horse-num">#12</span>KEOPS DU BUHOT</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>15%</strong></span>
+        <span>Marché : <strong>12%</strong></span>
+        <span class="ev ev-mid">EV 1.21</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#10</span>KELIA DES TOUCHES</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>8%</strong></span>
+        <span>Marché : <strong>6%</strong></span>
+        <span class="ev ev-mid">EV 1.24</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">AGEN LA GARENNE · R10·C5</span>
+    <span class="race-meta">
+      <span>15:55</span><span>2625 m</span><span>14 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 14 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R10/C5/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#2</span>JORDAN CHENEVIERE  +  <span class="horse-num">#8</span>JASPER SPOKEN</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>18%</strong></span>
+        <span>Marché : <strong>14%</strong></span>
+        <span class="ev ev-mid">EV 1.23</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#2</span>JORDAN CHENEVIERE</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>9%</strong></span>
+        <span>Marché : <strong>7%</strong></span>
+        <span class="ev ev-mid">EV 1.24</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">REIMS · R13·C5</span>
+    <span class="race-meta">
+      <span>16:00</span><span>2500 m</span><span>10 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 10 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R13/C5/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#10</span>MON ROYAUME  +  <span class="horse-num">#1</span>MEC D'ERLANGER</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>23%</strong></span>
+        <span>Marché : <strong>20%</strong></span>
+        <span class="ev ev-mid">EV 1.14</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#10</span>MON ROYAUME</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>12%</strong></span>
+        <span>Marché : <strong>10%</strong></span>
+        <span class="ev ev-mid">EV 1.17</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">CHARTRES · R15·C5</span>
+    <span class="race-meta">
+      <span>16:00</span><span>2800 m</span><span>12 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 12 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R15/C5/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#3</span>MENJOY QUICK  +  <span class="horse-num">#4</span>MY SUN DRALIAM</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>23%</strong></span>
+        <span>Marché : <strong>17%</strong></span>
+        <span class="ev ev-high">EV 1.41</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#3</span>MENJOY QUICK</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>12%</strong></span>
+        <span>Marché : <strong>8%</strong></span>
+        <span class="ev ev-high">EV 1.43</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">CHERBOURG · R16·C5</span>
+    <span class="race-meta">
+      <span>16:00</span><span>2625 m</span><span>18 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 18 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R16/C5/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#6</span>INTRIGUE DE VIETTE  +  <span class="horse-num">#8</span>I LOVE DU CHERISAY</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>14%</strong></span>
+        <span>Marché : <strong>11%</strong></span>
+        <span class="ev ev-mid">EV 1.24</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#6</span>INTRIGUE DE VIETTE</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>7%</strong></span>
+        <span>Marché : <strong>6%</strong></span>
+        <span class="ev ev-mid">EV 1.24</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">REIMS · R13·C6</span>
+    <span class="race-meta">
+      <span>16:30</span><span>2500 m</span><span>11 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 11 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R13/C6/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#11</span>MISS LADY QUICK  +  <span class="horse-num">#5</span>MIROITANTE DE PADD</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>22%</strong></span>
+        <span>Marché : <strong>18%</strong></span>
+        <span class="ev ev-mid">EV 1.20</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#11</span>MISS LADY QUICK</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>11%</strong></span>
+        <span>Marché : <strong>9%</strong></span>
+        <span class="ev ev-mid">EV 1.23</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">CHARTRES · R15·C6</span>
+    <span class="race-meta">
+      <span>16:30</span><span>2800 m</span><span>10 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 9 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R15/C6/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#9</span>MISS MELODY PEEL  +  <span class="horse-num">#10</span>MAGGIE MAY</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>32%</strong></span>
+        <span>Marché : <strong>22%</strong></span>
+        <span class="ev ev-high">EV 1.43</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#9</span>MISS MELODY PEEL</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>18%</strong></span>
+        <span>Marché : <strong>11%</strong></span>
+        <span class="ev ev-high">EV 1.62</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">CHERBOURG · R16·C6</span>
+    <span class="race-meta">
+      <span>16:30</span><span>2625 m</span><span>14 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 14 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R16/C6/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#14</span>MONA PAGE  +  <span class="horse-num">#12</span>MARA</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>22%</strong></span>
+        <span>Marché : <strong>14%</strong></span>
+        <span class="ev ev-high">EV 1.56</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#14</span>MONA PAGE</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>12%</strong></span>
+        <span>Marché : <strong>7%</strong></span>
+        <span class="ev ev-high">EV 1.64</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">AGEN LA GARENNE · R10·C7</span>
+    <span class="race-meta">
+      <span>16:55</span><span>2575 m</span><span>9 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 8 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R10/C7/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#8</span>ICI MACHECOUL  +  <span class="horse-num">#5</span>JEU ROYAL</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>31%</strong></span>
+        <span>Marché : <strong>25%</strong></span>
+        <span class="ev ev-mid">EV 1.24</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#8</span>ICI MACHECOUL</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>16%</strong></span>
+        <span>Marché : <strong>12%</strong></span>
+        <span class="ev ev-mid">EV 1.26</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">CAVAILLON · R11·C8</span>
+    <span class="race-meta">
+      <span>17:00</span><span>2600 m</span><span>16 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 16 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R11/C8/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#6</span>IDYLLE GEMA  +  <span class="horse-num">#8</span>JAGUAR GEDE</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>17%</strong></span>
+        <span>Marché : <strong>12%</strong></span>
+        <span class="ev ev-high">EV 1.37</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#6</span>IDYLLE GEMA</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>9%</strong></span>
+        <span>Marché : <strong>6%</strong></span>
+        <span class="ev ev-high">EV 1.46</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">CHATILLON/CHALARONNE · R12·C8</span>
+    <span class="race-meta">
+      <span>17:00</span><span>2675 m</span><span>16 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 2 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R12/C8/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#9</span>HALTO MESSI</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>21.00</strong></span>
+        <span>Modèle : <strong>9%</strong></span>
+        <span>Marché : <strong>4%</strong></span>
+        <span class="ev ev-high">EV 2.20</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">REIMS · R13·C7</span>
+    <span class="race-meta">
+      <span>17:00</span><span>2500 m</span><span>12 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 12 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R13/C7/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#6</span>IDEAL DU MAXFRAN  +  <span class="horse-num">#2</span>JUSTIN DE VALMONT</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>20%</strong></span>
+        <span>Marché : <strong>17%</strong></span>
+        <span class="ev ev-mid">EV 1.22</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#6</span>IDEAL DU MAXFRAN</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>11%</strong></span>
+        <span>Marché : <strong>8%</strong></span>
+        <span class="ev ev-high">EV 1.32</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">CHARTRES · R15·C7</span>
+    <span class="race-meta">
+      <span>17:00</span><span>2800 m</span><span>14 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 13 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R15/C7/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#4</span>KELLY DU MENIL  +  <span class="horse-num">#3</span>KINA FOUTEAU</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>18%</strong></span>
+        <span>Marché : <strong>15%</strong></span>
+        <span class="ev ev-mid">EV 1.20</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#4</span>KELLY DU MENIL</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>10%</strong></span>
+        <span>Marché : <strong>8%</strong></span>
+        <span class="ev ev-mid">EV 1.26</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">CHERBOURG · R16·C7</span>
+    <span class="race-meta">
+      <span>17:00</span><span>2625 m</span><span>16 partants</span>
+    </span>
+    <span class="odds-tag odds-missing">⚠ 16 cotes manquantes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/01032026/R16/C7/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row ">
+    <div>
+      <span class="badge badge-duo">Duo</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#5</span>JUMP WITH ME  +  <span class="horse-num">#2</span>JABIOLE BELLEMARE</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>18%</strong></span>
+        <span>Marché : <strong>12%</strong></span>
+        <span class="ev ev-high">EV 1.46</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">4 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+  <div class="bet-row ">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#5</span>JUMP WITH ME</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>nan</strong></span>
+        <span>Modèle : <strong>9%</strong></span>
+        <span>Marché : <strong>6%</strong></span>
+        <span class="ev ev-high">EV 1.51</span>
+      </div>
+      
+    </div>
+    <div class="stake-col">
+      <div class="stake-amount">2 €</div>
+      <div class="stake-label">mise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">Système hippique PMU — paper trading uniquement</div>
+</body>
+</html>
