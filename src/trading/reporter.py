@@ -355,9 +355,9 @@ def export_bets_html(
         odds_cov = conn.execute(
             f"""
             SELECT ru.race_id,
-                   COUNT(DISTINCT ru.runner_id)                          AS total_runners,
-                   COUNT(DISTINCT CASE WHEN o.odds_type = 'morning'
-                                       THEN o.runner_id END)             AS runners_with_odds
+                   COUNT(DISTINCT ru.runner_id)                                    AS total_runners,
+                   COUNT(DISTINCT CASE WHEN o.odds_type IN ('morning', 'final')
+                                       THEN o.runner_id END)                       AS runners_with_odds
             FROM runners ru
             LEFT JOIN odds o ON o.runner_id = ru.runner_id
             WHERE ru.race_id IN ({placeholders})

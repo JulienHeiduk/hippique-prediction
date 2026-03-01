@@ -54,20 +54,28 @@ def compute_today_features(
     if base_df.empty:
         return pd.DataFrame()
 
-    # --- 2. Morning odds (final_odds will be NULL — race hasn't run) ---
+    # --- 2. Morning odds, with final_odds as fallback ---
+    # dernierRapportReference ('morning') is the reference price published before
+    # races. For late-programme reunions it may not yet be available when the
+    # morning session runs; in that case we fall back to dernierRapportDirect
+    # ('final') so implied probabilities are computed from real market odds
+    # rather than 1/field_size.
     race_ids_in = base_df["race_id"].unique().tolist()
     placeholders = ", ".join(["?"] * len(race_ids_in))
     odds_sql = f"""
         SELECT
             runner_id,
             race_id,
-            MAX(CASE WHEN odds_type = 'morning' THEN decimal_odds END) AS morning_odds,
+            MAX(CASE WHEN odds_type = 'morning' THEN decimal_odds END) AS morning_odds_raw,
             MAX(CASE WHEN odds_type = 'final'   THEN decimal_odds END) AS final_odds
         FROM odds
         WHERE race_id IN ({placeholders})
         GROUP BY runner_id, race_id
     """
     odds_df = conn.execute(odds_sql, race_ids_in).df()
+    # Effective morning_odds: prefer reference price; fall back to live odds
+    odds_df["morning_odds"] = odds_df["morning_odds_raw"].combine_first(odds_df["final_odds"])
+    odds_df = odds_df.drop(columns=["morning_odds_raw"])
 
     # --- 3. Rolling jockey win rate (no leakage: strictly before race date) ---
     jockey_sql = f"""
