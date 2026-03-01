@@ -166,6 +166,15 @@ def generate_bets(
     score_map = dict(zip(scores.index, scores.values))
     df["_score"] = df["runner_id"].map(score_map).fillna(0.0)
 
+    # Load existing bets for this date so we can protect them from overwrite.
+    existing_rows = conn.execute(
+        "SELECT bet_id, status, morning_odds, created_at FROM bets WHERE date = ?",
+        [date],
+    ).df()
+    existing_map: dict[str, dict] = {
+        row["bet_id"]: row for row in existing_rows.to_dict("records")
+    }
+
     bets: list[dict] = []
     now = datetime.now(tz=timezone.utc)
 
@@ -198,31 +207,41 @@ def generate_bets(
             ev_ratio = model_prob_top1 / implied_prob_top1 if implied_prob_top1 > 0 else 0.0
 
             if model_prob_top1 > implied_prob_top1 * ev_threshold:
-                morning_odds_val = float(morning_odds_top1) if not pd.isna(morning_odds_top1) else None
-                ks = kelly_stake(model_prob_top1, morning_odds_val or field_size)
-                bet = {
-                    "bet_id": f"{race_id}_win",
-                    "race_id": str(race_id),
-                    "date": date,
-                    "hippodrome": hippodrome,
-                    "bet_type": "win",
-                    "runner_id_1": str(top1["runner_id"]),
-                    "runner_id_2": None,
-                    "horse_name_1": top1.get("horse_name"),
-                    "horse_name_2": None,
-                    "morning_odds": morning_odds_val,
-                    "model_prob": model_prob_top1,
-                    "implied_prob": float(implied_prob_top1),
-                    "ev_ratio": ev_ratio,
-                    "kelly_stake": ks,
-                    "stake": UNIT_STAKE,
-                    "status": "pending",
-                    "pnl": None,
-                    "created_at": now,
-                    "resolved_at": None,
-                }
-                upsert_bet(conn, bet)
-                bets.append(bet)
+                bet_id_win = f"{race_id}_win"
+                existing_win = existing_map.get(bet_id_win, {})
+
+                # Never overwrite a resolved bet
+                if existing_win.get("status") in ("won", "lost"):
+                    bets.append(existing_win)  # keep it in the returned list
+                else:
+                    morning_odds_val = float(morning_odds_top1) if not pd.isna(morning_odds_top1) else None
+                    # Preserve valid morning_odds from a previous run if current scrape has none
+                    if morning_odds_val is None and existing_win.get("morning_odds") is not None:
+                        morning_odds_val = existing_win["morning_odds"]
+                    ks = kelly_stake(model_prob_top1, morning_odds_val or field_size)
+                    bet = {
+                        "bet_id": bet_id_win,
+                        "race_id": str(race_id),
+                        "date": date,
+                        "hippodrome": hippodrome,
+                        "bet_type": "win",
+                        "runner_id_1": str(top1["runner_id"]),
+                        "runner_id_2": None,
+                        "horse_name_1": top1.get("horse_name"),
+                        "horse_name_2": None,
+                        "morning_odds": morning_odds_val,
+                        "model_prob": model_prob_top1,
+                        "implied_prob": float(implied_prob_top1),
+                        "ev_ratio": ev_ratio,
+                        "kelly_stake": ks,
+                        "stake": UNIT_STAKE,
+                        "status": "pending",
+                        "pnl": None,
+                        "created_at": existing_win.get("created_at") or now,
+                        "resolved_at": None,
+                    }
+                    upsert_bet(conn, bet)
+                    bets.append(bet)
                 logger.info(
                     "BET win | {} | {} | model_prob={:.2%} implied={:.2%} EV={:.2f}",
                     race_id, top1.get("horse_name"), model_prob_top1,
@@ -246,32 +265,42 @@ def generate_bets(
             ev_ratio_duo = combined_model_prob / combined_implied_prob if combined_implied_prob > 0 else 0.0
 
             if combined_model_prob > combined_implied_prob * ev_threshold:
-                morning_odds_top1 = top1.get("morning_odds")
-                morning_odds_val = float(morning_odds_top1) if not pd.isna(morning_odds_top1) else None
-                ks = kelly_stake(combined_model_prob, morning_odds_val or field_size)
-                bet = {
-                    "bet_id": f"{race_id}_duo",
-                    "race_id": str(race_id),
-                    "date": date,
-                    "hippodrome": hippodrome,
-                    "bet_type": "duo",
-                    "runner_id_1": str(top1["runner_id"]),
-                    "runner_id_2": str(top2["runner_id"]),
-                    "horse_name_1": top1.get("horse_name"),
-                    "horse_name_2": top2.get("horse_name"),
-                    "morning_odds": morning_odds_val,
-                    "model_prob": combined_model_prob,
-                    "implied_prob": combined_implied_prob,
-                    "ev_ratio": ev_ratio_duo,
-                    "kelly_stake": ks,
-                    "stake": UNIT_STAKE * 2,
-                    "status": "pending",
-                    "pnl": None,
-                    "created_at": now,
-                    "resolved_at": None,
-                }
-                upsert_bet(conn, bet)
-                bets.append(bet)
+                bet_id_duo = f"{race_id}_duo"
+                existing_duo = existing_map.get(bet_id_duo, {})
+
+                # Never overwrite a resolved bet
+                if existing_duo.get("status") in ("won", "lost"):
+                    bets.append(existing_duo)  # keep it in the returned list
+                else:
+                    morning_odds_top1 = top1.get("morning_odds")
+                    morning_odds_val = float(morning_odds_top1) if not pd.isna(morning_odds_top1) else None
+                    # Preserve valid morning_odds from a previous run if current scrape has none
+                    if morning_odds_val is None and existing_duo.get("morning_odds") is not None:
+                        morning_odds_val = existing_duo["morning_odds"]
+                    ks = kelly_stake(combined_model_prob, morning_odds_val or field_size)
+                    bet = {
+                        "bet_id": bet_id_duo,
+                        "race_id": str(race_id),
+                        "date": date,
+                        "hippodrome": hippodrome,
+                        "bet_type": "duo",
+                        "runner_id_1": str(top1["runner_id"]),
+                        "runner_id_2": str(top2["runner_id"]),
+                        "horse_name_1": top1.get("horse_name"),
+                        "horse_name_2": top2.get("horse_name"),
+                        "morning_odds": morning_odds_val,
+                        "model_prob": combined_model_prob,
+                        "implied_prob": combined_implied_prob,
+                        "ev_ratio": ev_ratio_duo,
+                        "kelly_stake": ks,
+                        "stake": UNIT_STAKE * 2,
+                        "status": "pending",
+                        "pnl": None,
+                        "created_at": existing_duo.get("created_at") or now,
+                        "resolved_at": None,
+                    }
+                    upsert_bet(conn, bet)
+                    bets.append(bet)
                 logger.info(
                     "BET duo | {} | {}+{} | model_prob={:.2%} implied={:.2%} EV={:.2f}",
                     race_id, top1.get("horse_name"), top2.get("horse_name"),
