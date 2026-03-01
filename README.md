@@ -55,7 +55,7 @@ from src.scraper import get_connection, run_pipeline
 from src.trading.engine import resolve_bets, generate_bets
 from src.trading.reporter import export_bets_html
 
-date = '20260228'   # remplacer par la date du jour YYYYMMDD
+date = '20260301'   # remplacer par la date du jour YYYYMMDD
 
 run_pipeline(date)
 conn = get_connection()

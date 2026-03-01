@@ -401,6 +401,7 @@ def export_bets_html(
     n_lost    = sum(1 for b in bets if b.get("status") == "lost")
     n_pending = sum(1 for b in bets if b.get("status") == "pending")
     resolved  = [b for b in bets if b.get("status") in ("won", "lost")]
+    total_budget = sum(b.get("stake") or 0 for b in bets)
     total_stake = sum(b.get("stake") or 0 for b in resolved)
     total_pnl   = sum(b.get("pnl")   or 0 for b in resolved)
     roi = total_pnl / total_stake if total_stake > 0 else None
@@ -417,6 +418,7 @@ def export_bets_html(
             _card(str(n_total),   "paris total"),
             _card(f"{n_won}/{n_won+n_lost}" if (n_won + n_lost) else "0/0", "gagnés"),
             _card(str(n_pending), "en attente"),
+            _card(f"{total_budget:.1f} €", "budget du jour"),
             _card(f"{total_pnl:+.1f} €", "P&amp;L", pnl_class),
         ]
         if roi is not None:
@@ -432,6 +434,15 @@ def export_bets_html(
             races_seen.append(rid)
             bets_by_race[rid] = []
         bets_by_race[rid].append(b)
+
+    # Sort races by start time so the HTML is ordered chronologically
+    def _race_sort_key(race_id: str):
+        dt = race_meta.get(race_id, {}).get("race_datetime")
+        if dt is None or str(dt) in ("None", "NaT", ""):
+            return ""
+        return dt.strftime("%H:%M") if hasattr(dt, "strftime") else str(dt)[11:16]
+
+    races_seen.sort(key=_race_sort_key)
 
     # ── 7. Build HTML body ──────────────────────────────────────────────────
     body_parts: list[str] = []
