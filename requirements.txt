@@ -16,7 +16,8 @@ lightgbm
 scikit-learn
 
 # Dashboard
-streamlit
+streamlit>=1.35.0
+altair>=4.0,<6
 
 # Utilities
 python-dotenv
