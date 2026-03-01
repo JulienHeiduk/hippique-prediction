@@ -17,7 +17,8 @@
       "Skill(commit-helper)",
       "Bash(git commit:*)",
       "Bash(git:*)",
-      "Bash(C:/Users/julie/OneDrive/Bureau/hippique-prediction/.venv/Scripts/python.exe:*)"
+      "Bash(C:/Users/julie/OneDrive/Bureau/hippique-prediction/.venv/Scripts/python.exe:*)",
+      "Bash(test:*)"
     ]
   }
 }
