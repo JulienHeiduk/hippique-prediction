@@ -16,7 +16,8 @@
       "Bash(PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe:*)",
       "Skill(commit-helper)",
       "Bash(git commit:*)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Bash(C:/Users/julie/OneDrive/Bureau/hippique-prediction/.venv/Scripts/python.exe:*)"
     ]
   }
 }
