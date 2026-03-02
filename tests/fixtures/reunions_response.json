@@ -15,7 +15,8 @@
             "heureDepart": 1708945200000,
             "distance": 2700,
             "etatPiste": "BON",
-            "nombreDeclaresPartants": 12
+            "nombreDeclaresPartants": 12,
+            "hasEParis": true
           },
           {
             "numOrdre": 2,
@@ -24,7 +25,17 @@
             "heureDepart": 1708948800000,
             "distance": 2150,
             "etatPiste": "BON",
-            "nombreDeclaresPartants": 9
+            "nombreDeclaresPartants": 9,
+            "hasEParis": true
+          },
+          {
+            "numOrdre": 3,
+            "specialite": "TROT_ATTELE",
+            "discipline": "ATTELE",
+            "heureDepart": 1708956000000,
+            "distance": 2100,
+            "nombreDeclaresPartants": 8,
+            "hasEParis": false
           }
         ]
       },

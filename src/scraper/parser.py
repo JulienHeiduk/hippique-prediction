@@ -131,6 +131,17 @@ def parse_reunions(raw: dict, date: str) -> list[RaceData]:
             if not _is_trot(specialite):
                 continue
 
+            # Skip courses not available for online betting (terminal-only races
+            # have hasEParis=False and no E_* paris types — they don't appear on
+            # pmu.fr/turf where the user places bets).
+            if course.get("hasEParis") is False:
+                course_num = safe_int(course.get("numOrdre"))
+                logger.info(
+                    "Skipping R{}C{} (hasEParis=False — terminal only, not on pmu.fr/turf)",
+                    reunion_num, course_num,
+                )
+                continue
+
             course_num = safe_int(course.get("numOrdre"))
             race_id = f"{date}-R{reunion_num}-C{course_num}"
             races.append(RaceData(

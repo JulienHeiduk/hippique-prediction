@@ -74,6 +74,15 @@ class TestParseReunions:
         assert races[0].discipline == "TROT_ATTELE"
         assert races[1].discipline == "TROT_MONTE"
 
+    def test_filters_terminal_only_courses(self, reunions_raw):
+        """Courses with hasEParis=False (terminal-only) must be excluded."""
+        from src.scraper.parser import parse_reunions
+        races = parse_reunions(reunions_raw, "20240226")
+        # Fixture has 3 trot courses but C3 has hasEParis=False → only 2 returned
+        assert len(races) == 2
+        race_ids = [r.race_id for r in races]
+        assert "20240226-R1-C3" not in race_ids
+
 
 class TestParseRunners:
     def test_scratch_flag(self, race_raw):
