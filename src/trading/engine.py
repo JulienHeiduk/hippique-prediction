@@ -35,6 +35,7 @@ def compute_today_features(
             ru.race_id,
             ra.date,
             ra.hippodrome,
+            ra.race_datetime,
             ra.distance_metres,
             ra.field_size,
             ru.horse_name,
@@ -115,7 +116,7 @@ def compute_today_features(
 
     # --- 7. Select final columns ---
     keep = [
-        "runner_id", "race_id", "date", "hippodrome", "distance_metres",
+        "runner_id", "race_id", "date", "hippodrome", "race_datetime", "distance_metres",
         "field_size", "horse_name", "jockey_name",
         "morning_odds", "final_odds",
         "morning_odds_rank", "final_odds_rank", "odds_drift_pct",
@@ -132,6 +133,7 @@ def generate_bets(
     ev_threshold: float = EV_THRESHOLD,
     scorer_fn: Callable[[pd.DataFrame], pd.Series] | None = None,
     bet_types: list[str] | None = None,
+    min_race_time: datetime | None = None,
 ) -> list[dict]:
     """Score today's runners and log EV+ bets to the bets table.
 
@@ -165,6 +167,20 @@ def generate_bets(
 
     score_map = dict(zip(scores.index, scores.values))
     df["_score"] = df["runner_id"].map(score_map).fillna(0.0)
+
+    # Filter out races that have already started
+    if min_race_time is not None and "race_datetime" in df.columns:
+        race_datetimes = df.groupby("race_id")["race_datetime"].first()
+        future_races = race_datetimes[
+            race_datetimes.isna() | (race_datetimes > min_race_time)
+        ].index
+        skipped = set(df["race_id"].unique()) - set(future_races)
+        if skipped:
+            logger.info("Skipping {} past/in-progress race(s) in update session", len(skipped))
+        df = df[df["race_id"].isin(future_races)]
+        if df.empty:
+            logger.info("No future races to update bets for {}", date)
+            return []
 
     # Load existing bets for this date so we can protect them from overwrite.
     existing_rows = conn.execute(

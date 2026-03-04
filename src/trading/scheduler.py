@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from loguru import logger
@@ -98,7 +98,8 @@ def run_hourly_update(date: str | None = None) -> None:
 
     conn = get_connection()
     try:
-        bets = generate_bets(conn, date)
+        now = datetime.now(tz=timezone.utc)
+        bets = generate_bets(conn, date, min_race_time=now)
         logger.info("{} bets refreshed for {}", len(bets), date)
         report_path = export_bets_html(conn, date)
         logger.info("Bet sheet updated → {}", report_path)
