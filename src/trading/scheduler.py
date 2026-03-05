@@ -76,18 +76,22 @@ def run_morning_session(date: str | None = None) -> None:
             except Exception as exc:
                 logger.warning("LightGBM training failed: {} — skipping", exc)
 
-        # Rule-based bets
-        bets_rb = generate_bets(conn, date)
+        # WIN bets: rule-based scorer (best ROI on win bets in backtest)
+        bets_win = generate_bets(conn, date, bet_types=["win"])
 
-        # LightGBM bets
-        bets_lgbm = []
+        # DUO bets: LightGBM scorer (best ROI on duo bets in backtest)
+        bets_duo = []
         if lgbm_model is not None:
             lgbm_scorer = lambda df, m=lgbm_model: score_lgbm(df, m)
-            bets_lgbm = generate_bets(conn, date, scorer_fn=lgbm_scorer, model_source="lgbm")
+            bets_duo = generate_bets(
+                conn, date,
+                scorer_fn=lgbm_scorer, model_source="lgbm",
+                bet_types=["duo"],
+            )
 
         logger.info(
-            "=== {} rule-based + {} lgbm bets logged for {} ===",
-            len(bets_rb), len(bets_lgbm), date,
+            "=== {} win (règles) + {} duo (lgbm) bets logged for {} ===",
+            len(bets_win), len(bets_duo), date,
         )
         report_path = export_bets_html(conn, date)
         logger.info("Bet sheet saved → {}", report_path)
@@ -125,16 +129,18 @@ def run_hourly_update(date: str | None = None) -> None:
         lgbm_model = load_lgbm_model()
         lgbm_scorer = (lambda df, m=lgbm_model: score_lgbm(df, m)) if lgbm_model else None
 
-        bets_rb = generate_bets(conn, date, min_race_time=now)
-        bets_lgbm = []
+        bets_win = generate_bets(conn, date, bet_types=["win"], min_race_time=now)
+        bets_duo = []
         if lgbm_scorer:
-            bets_lgbm = generate_bets(
-                conn, date, scorer_fn=lgbm_scorer, model_source="lgbm", min_race_time=now
+            bets_duo = generate_bets(
+                conn, date,
+                scorer_fn=lgbm_scorer, model_source="lgbm",
+                bet_types=["duo"], min_race_time=now,
             )
 
         logger.info(
-            "{} rule-based + {} lgbm bets refreshed for {}",
-            len(bets_rb), len(bets_lgbm), date,
+            "{} win (règles) + {} duo (lgbm) bets refreshed for {}",
+            len(bets_win), len(bets_duo), date,
         )
         report_path = export_bets_html(conn, date)
         logger.info("Bet sheet updated → {}", report_path)

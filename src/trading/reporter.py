@@ -446,13 +446,13 @@ def export_bets_html(
         if rb_resolved:
             cards.append(_card(
                 f"{rb_pnl:+.1f} €",
-                "P&amp;L Règles",
+                "P&amp;L WIN (Règles)",
                 "val-pos" if rb_pnl >= 0 else "val-neg",
             ))
         if lgbm_resolved:
             cards.append(_card(
                 f"{lgbm_pnl:+.1f} €",
-                "P&amp;L LightGBM",
+                "P&amp;L DUO (LightGBM)",
                 "val-pos" if lgbm_pnl >= 0 else "val-neg",
             ))
         summary_html = '<div class="summary">' + "".join(cards) + "</div>"

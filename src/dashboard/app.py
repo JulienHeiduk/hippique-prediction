@@ -27,8 +27,8 @@ def _get_cumulative_pnl() -> dict[str, float | None]:
 
     _VAL = r'<div class="val[^"]*">([+\-]?\d+\.?\d*)\s*€</div>\s*<div class="lbl">{lbl}</div>'
     patterns = {
-        "rule_based": re.compile(_VAL.format(lbl=r"P&amp;L R.gles")),
-        "lgbm":       re.compile(_VAL.format(lbl=r"P&amp;L LightGBM")),
+        "rule_based": re.compile(_VAL.format(lbl=r"P&amp;L WIN .R.gles.")),
+        "lgbm":       re.compile(_VAL.format(lbl=r"P&amp;L DUO .LightGBM.")),
         "total":      re.compile(_VAL.format(lbl=r"P&amp;L")),
     }
 
@@ -84,9 +84,9 @@ with st.sidebar:
         if pnl["total"] is not None:
             st.metric("Total gains / pertes", f"{pnl['total']:+.1f} €")
         if pnl["rule_based"] is not None:
-            st.metric("📊 Règles", f"{pnl['rule_based']:+.1f} €")
+            st.metric("📊 WIN (Règles)", f"{pnl['rule_based']:+.1f} €")
         if pnl["lgbm"] is not None:
-            st.metric("🤖 LightGBM", f"{pnl['lgbm']:+.1f} €")
+            st.metric("🤖 DUO (LightGBM)", f"{pnl['lgbm']:+.1f} €")
 
     st.divider()
     st.caption("Paper trading uniquement — Trot PMU")
