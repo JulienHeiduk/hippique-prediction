@@ -13,8 +13,22 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from config.settings import ROOT
+from src.scraper import get_connection
 
 REPORTS_DIR = ROOT / "data" / "reports"
+
+
+def _get_cumulative_pnl() -> float | None:
+    """Return total P&L across all resolved bets, or None on error."""
+    try:
+        conn = get_connection()
+        result = conn.execute(
+            "SELECT COALESCE(SUM(pnl), 0) FROM bets WHERE status IN ('won', 'lost')"
+        ).fetchone()
+        conn.close()
+        return float(result[0]) if result else None
+    except Exception:
+        return None
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -48,14 +62,24 @@ with st.sidebar:
         selected_path = options[selected_label]
 
         st.divider()
-        html_bytes = selected_path.read_bytes()
-        st.download_button(
-            label="⬇️ Télécharger la fiche",
-            data=html_bytes,
-            file_name=selected_path.name,
-            mime="text/html",
-            use_container_width=True,
-        )
+        cum_pnl = _get_cumulative_pnl()
+        if cum_pnl is not None:
+            color = "#2e7d32" if cum_pnl >= 0 else "#c62828"
+            sign = "+" if cum_pnl >= 0 else ""
+            st.markdown(
+                f"""
+                <div style="background:#fff;border-radius:8px;padding:12px 18px;
+                            box-shadow:0 1px 3px rgba(0,0,0,.08);text-align:center;">
+                  <div style="font-size:24px;font-weight:700;color:{color};">
+                    {sign}{cum_pnl:.1f} €
+                  </div>
+                  <div style="font-size:11px;color:#888;margin-top:2px;">
+                    Total gains / pertes
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
     st.divider()
     st.caption("Paper trading uniquement — Trot PMU")
