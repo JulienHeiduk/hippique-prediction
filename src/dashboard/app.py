@@ -17,25 +17,36 @@ from config.settings import ROOT
 REPORTS_DIR = ROOT / "data" / "reports"
 
 
-def _get_cumulative_pnl() -> float | None:
-    """Return cumulative P&L by parsing the P&L value from each HTML report file."""
+def _get_cumulative_pnl() -> dict[str, float | None]:
+    """Parse cumulative P&L per model from all HTML report files.
+
+    Returns a dict with keys 'rule_based', 'lgbm', 'total'.
+    A value is None when no resolved bets exist yet for that model.
+    """
     import re
-    total = 0.0
-    found = False
+
+    _VAL = r'<div class="val[^"]*">([+\-]?\d+\.?\d*)\s*€</div>\s*<div class="lbl">{lbl}</div>'
+    patterns = {
+        "rule_based": re.compile(_VAL.format(lbl=r"P&amp;L R.gles")),
+        "lgbm":       re.compile(_VAL.format(lbl=r"P&amp;L LightGBM")),
+        "total":      re.compile(_VAL.format(lbl=r"P&amp;L")),
+    }
+
+    totals: dict[str, float] = {"rule_based": 0.0, "lgbm": 0.0, "total": 0.0}
+    found:  dict[str, bool]  = {"rule_based": False, "lgbm": False, "total": False}
+
     for html_file in sorted(REPORTS_DIR.glob("bets_*.html")):
         try:
             content = html_file.read_text(encoding="utf-8")
-            match = re.search(
-                r'<div class="val[^"]*">([+\-]?\d+\.?\d*)\s*€</div>'
-                r'\s*<div class="lbl">P&amp;L</div>',
-                content,
-            )
-            if match:
-                total += float(match.group(1))
-                found = True
+            for key, pat in patterns.items():
+                m = pat.search(content)
+                if m:
+                    totals[key] += float(m.group(1))
+                    found[key] = True
         except Exception:
             pass
-    return total if found else None
+
+    return {k: (totals[k] if found[k] else None) for k in totals}
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -69,9 +80,13 @@ with st.sidebar:
         selected_path = options[selected_label]
 
         st.divider()
-        cum_pnl = _get_cumulative_pnl()
-        if cum_pnl is not None:
-            st.metric("Total gains / pertes", f"{cum_pnl:+.1f} €")
+        pnl = _get_cumulative_pnl()
+        if pnl["total"] is not None:
+            st.metric("Total gains / pertes", f"{pnl['total']:+.1f} €")
+        if pnl["rule_based"] is not None:
+            st.metric("📊 Règles", f"{pnl['rule_based']:+.1f} €")
+        if pnl["lgbm"] is not None:
+            st.metric("🤖 LightGBM", f"{pnl['lgbm']:+.1f} €")
 
     st.divider()
     st.caption("Paper trading uniquement — Trot PMU")
