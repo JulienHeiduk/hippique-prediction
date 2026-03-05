@@ -64,7 +64,11 @@ with st.sidebar:
 
         st.divider()
         cum_pnl, pnl_err = _get_cumulative_pnl()
-        st.write("DEBUG pnl=", cum_pnl, "err=", pnl_err)
+        from config.settings import DB_PATH
+        import duckdb as _ddb
+        _c = _ddb.connect(str(DB_PATH), read_only=True)
+        st.write("DEBUG path=", str(DB_PATH), "| exists=", DB_PATH.exists(), "| bets rows=", _c.execute("SELECT COUNT(*) FROM bets").fetchone()[0], "| pnl=", cum_pnl, "| err=", pnl_err)
+        _c.close()
         if pnl_err:
             st.warning(f"P&L indisponible : {pnl_err}")
         elif cum_pnl is not None:
