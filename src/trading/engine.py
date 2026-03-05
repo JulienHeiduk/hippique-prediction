@@ -252,9 +252,12 @@ def generate_bets(
 
     # Filter out races that have already started
     if min_race_time is not None and "race_datetime" in df.columns:
+        # DuckDB returns tz-naive datetimes; strip tz from min_race_time for comparison
+        cutoff = min_race_time.replace(tzinfo=None)
         race_datetimes = df.groupby("race_id")["race_datetime"].first()
+        race_datetimes = pd.to_datetime(race_datetimes, errors="coerce")
         future_races = race_datetimes[
-            race_datetimes.isna() | (race_datetimes > min_race_time)
+            race_datetimes.isna() | (race_datetimes > cutoff)
         ].index
         skipped = set(df["race_id"].unique()) - set(future_races)
         if skipped:
