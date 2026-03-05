@@ -14,13 +14,35 @@ if TYPE_CHECKING:
 
 # Features used for training and inference (must exist in the features DataFrame)
 FEATURES = [
+    # Form features
     "form_score",
+    "win_rate_last5",
+    "top3_rate_last5",
+    "form_trend",
+    "best_position_last5",
+    "n_valid_runs",
+    # Market features
     "morning_implied_prob_norm",
     "odds_drift_pct",
+    "morning_odds_rank",
+    "odds_rank_change",
+    "is_favorite",
+    "field_entropy",
+    # Runner features
     "jockey_win_rate",
+    "trainer_win_rate",
+    "draw_position",
+    "handicap_distance",
+    "deferre",
+    "race_hour",
+    # Race features
     "distance_metres",
     "field_size",
-    "morning_odds_rank",
+    # Horse history
+    "horse_n_runs",
+    "horse_win_rate",
+    "horse_win_rate_at_track",
+    "days_since_last_race",
 ]
 
 

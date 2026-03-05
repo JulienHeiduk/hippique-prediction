@@ -1,6 +1,7 @@
 """Market odds feature engineering."""
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 
@@ -34,5 +35,19 @@ def odds_features(runners_df: pd.DataFrame) -> pd.DataFrame:
 
     race_sum = df.groupby("race_id")["morning_implied_prob"].transform("sum")
     df["morning_implied_prob_norm"] = df["morning_implied_prob"] / race_sum
+
+    # Rank movement: positive = horse drifted out (market less confident)
+    df["odds_rank_change"] = df["morning_odds_rank"] - df["final_odds_rank"]
+
+    # Favourite flag
+    df["is_favorite"] = (df["morning_odds_rank"] == 1).astype(float)
+
+    # Shannon entropy of implied probs within the race (race predictability)
+    def _entropy(s: pd.Series) -> float:
+        p = s.dropna()
+        p = p[p > 0]
+        return float(-(p * np.log(p + 1e-10)).sum()) if len(p) else 0.0
+
+    df["field_entropy"] = df.groupby("race_id")["morning_implied_prob_norm"].transform(_entropy)
 
     return df
