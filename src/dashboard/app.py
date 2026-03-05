@@ -13,22 +13,23 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from config.settings import ROOT
-from src.scraper import get_connection
 
 REPORTS_DIR = ROOT / "data" / "reports"
 
 
-def _get_cumulative_pnl() -> float | None:
-    """Return total P&L across all resolved bets, or None on error."""
+def _get_cumulative_pnl() -> tuple[float | None, str | None]:
+    """Return (total P&L, error_message) across all resolved bets."""
     try:
-        conn = get_connection()
+        from config.settings import DB_PATH
+        import duckdb
+        conn = duckdb.connect(str(DB_PATH), read_only=True)
         result = conn.execute(
             "SELECT COALESCE(SUM(pnl), 0) FROM bets WHERE status IN ('won', 'lost')"
         ).fetchone()
         conn.close()
-        return float(result[0]) if result else None
-    except Exception:
-        return None
+        return (float(result[0]) if result else None), None
+    except Exception as e:
+        return None, str(e)
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -62,8 +63,10 @@ with st.sidebar:
         selected_path = options[selected_label]
 
         st.divider()
-        cum_pnl = _get_cumulative_pnl()
-        if cum_pnl is not None:
+        cum_pnl, pnl_err = _get_cumulative_pnl()
+        if pnl_err:
+            st.warning(f"P&L indisponible : {pnl_err}")
+        elif cum_pnl is not None:
             color = "#2e7d32" if cum_pnl >= 0 else "#c62828"
             sign = "+" if cum_pnl >= 0 else ""
             st.markdown(
