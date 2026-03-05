@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Paris PMU — 03/03/2026</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+    font-size: 14px;
+    background: #f4f5f7;
+    color: #1a1a2e;
+    padding: 24px 16px;
+  }
+  h1 {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 6px;
+    color: #1a1a2e;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: #666;
+    margin-bottom: 16px;
+  }
+  /* ── Summary bar ── */
+  .summary {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+  }
+  .summary-card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 12px 18px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    min-width: 110px;
+  }
+  .summary-card .val {
+    font-size: 22px;
+    font-weight: 700;
+    color: #1a1a2e;
+  }
+  .summary-card .lbl {
+    font-size: 11px;
+    color: #888;
+    margin-top: 2px;
+  }
+  .val-pos { color: #2e7d32 !important; }
+  .val-neg { color: #c62828 !important; }
+  /* ── Race blocks ── */
+  .race-block {
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.10);
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .race-header {
+    background: #1a1a2e;
+    color: #fff;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .race-ref {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: .5px;
+  }
+  .race-meta {
+    font-size: 12px;
+    color: #aab;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .race-meta span::before { content: "·"; margin-right: 6px; }
+  .race-meta span:first-child::before { content: ""; margin-right: 0; }
+  .pmu-link {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 600;
+    color: #8ab4f8;
+    text-decoration: none;
+    white-space: nowrap;
+    border: 1px solid rgba(138,180,248,.4);
+    border-radius: 4px;
+    padding: 3px 8px;
+  }
+  .pmu-link:hover { background: rgba(138,180,248,.15); }
+  /* ── Bet rows ── */
+  .bet-row {
+    border-top: 1px solid #eef0f4;
+    padding: 14px 16px;
+    display: grid;
+    grid-template-columns: 90px 1fr auto;
+    gap: 10px;
+    align-items: start;
+  }
+  .bet-row.row-won  { background: #f1faf2; }
+  .bet-row.row-lost { background: #fff8f8; }
+  .badge {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 5px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .8px;
+    text-transform: uppercase;
+  }
+  .badge-win   { background: #e8f5e9; color: #2e7d32; }
+  .badge-duo   { background: #e3f2fd; color: #1565c0; }
+  .badge-place { background: #fff8e1; color: #e65100; }
+  .status-badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .6px;
+    text-transform: uppercase;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .status-won     { background: #2e7d32; color: #fff; }
+  .status-lost    { background: #c62828; color: #fff; }
+  .status-pending { background: #757575; color: #fff; }
+  .model-badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .6px;
+    text-transform: uppercase;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .model-rule { background: #fff8e1; color: #f57f17; }
+  .model-lgbm { background: #e8eaf6; color: #283593; }
+  .horse-line {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1a1a2e;
+    margin-bottom: 3px;
+  }
+  .horse-num {
+    display: inline-block;
+    background: #1a1a2e;
+    color: #fff;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 13px;
+    font-weight: 700;
+    margin-right: 6px;
+  }
+  .bet-stats {
+    font-size: 12px;
+    color: #555;
+    margin-top: 4px;
+  }
+  .bet-stats span { margin-right: 12px; }
+  .result-line {
+    font-size: 12px;
+    margin-top: 5px;
+    color: #444;
+  }
+  .finish-pos {
+    font-weight: 700;
+  }
+  .winner-name {
+    color: #2e7d32;
+    font-weight: 600;
+  }
+  .ev { font-weight: 700; }
+  .ev-high { color: #2e7d32; }
+  .ev-mid  { color: #e65100; }
+  /* ── Odds completeness tag ── */
+  .odds-tag {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+  .odds-ok      { background: rgba(46,125,50,.25);  color: #a5d6a7; }
+  .odds-missing { background: rgba(230,81,0,.30);   color: #ffcc80; }
+  /* ── Stake / P&L column ── */
+  .stake-col {
+    text-align: right;
+    white-space: nowrap;
+  }
+  .stake-amount {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1a1a2e;
+  }
+  .pnl-pos { font-size: 18px; font-weight: 700; color: #2e7d32; }
+  .pnl-neg { font-size: 18px; font-weight: 700; color: #c62828; }
+  .stake-label { font-size: 11px; color: #888; }
+  /* ── Empty state ── */
+  .no-bets {
+    background: #fff;
+    border-radius: 10px;
+    padding: 32px;
+    text-align: center;
+    color: #888;
+    font-size: 15px;
+  }
+  .footer {
+    margin-top: 28px;
+    font-size: 11px;
+    color: #aaa;
+    text-align: center;
+  }
+  @media print {
+    body { background: #fff; padding: 8px; }
+    .race-block { box-shadow: none; border: 1px solid #ccc; }
+    .race-header { background: #333 !important; -webkit-print-color-adjust: exact; }
+    .bet-row.row-won  { background: #f1faf2 !important; -webkit-print-color-adjust: exact; }
+    .bet-row.row-lost { background: #fff8f8 !important; -webkit-print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<h1>Paris du jour — 03/03/2026</h1>
+<p class="subtitle">Généré le 05/03/2026 12:53</p>
+<div class="summary"><div class="summary-card"><div class="val ">16</div><div class="lbl">paris total</div></div><div class="summary-card"><div class="val ">6/16</div><div class="lbl">gagnés</div></div><div class="summary-card"><div class="val ">0</div><div class="lbl">en attente</div></div><div class="summary-card"><div class="val ">32.0 €</div><div class="lbl">budget du jour</div></div><div class="summary-card"><div class="val val-pos">+57.0 €</div><div class="lbl">P&amp;L</div></div><div class="summary-card"><div class="val val-pos">+178%</div><div class="lbl">ROI</div></div><div class="summary-card"><div class="val val-pos">+57.0 €</div><div class="lbl">P&amp;L WIN (Règles)</div></div></div>
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">SON PARDO · R2·C1</span>
+    <span class="race-meta">
+      <span>10:45</span><span>2650 m</span><span>7 partants</span>
+    </span>
+    <span class="odds-tag odds-ok">✓ Cotes complètes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/03032026/R2/C1/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row row-won">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-won">✓ Gagné</span>
+      <span class="model-badge model-rule">Règles</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#5</span>MAX GIO</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>5.60</strong></span>
+        <span>Modèle : <strong>21%</strong></span>
+        <span>Marché : <strong>15%</strong></span>
+        <span class="ev ev-high">EV 1.37</span>
+      </div>
+      <div class="result-line"><span class="finish-pos">Arrivé 1er</span></div>
+    </div>
+    <div class="stake-col">
+      <div class="pnl-pos">+9.2 €</div>
+      <div class="stake-label">gain net</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">SON PARDO · R2·C3</span>
+    <span class="race-meta">
+      <span>11:35</span><span>2650 m</span><span>10 partants</span>
+    </span>
+    <span class="odds-tag odds-ok">✓ Cotes complètes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/03032026/R2/C3/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row row-lost">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-lost">✗ Perdu</span>
+      <span class="model-badge model-rule">Règles</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#10</span>MALTA DE LADIL</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>5.50</strong></span>
+        <span>Modèle : <strong>20%</strong></span>
+        <span>Marché : <strong>16%</strong></span>
+        <span class="ev ev-high">EV 1.31</span>
+      </div>
+      <div class="result-line"><span class="finish-pos">Arrivé 3e</span> · Vainqueur : <span class="winner-name">LARAMIE ATAC</span></div>
+    </div>
+    <div class="stake-col">
+      <div class="pnl-neg">-2.0 €</div>
+      <div class="stake-label">perte</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">AGEN LA GARENNE · R3·C3</span>
+    <span class="race-meta">
+      <span>12:57</span><span>2625 m</span><span>11 partants</span>
+    </span>
+    <span class="odds-tag odds-ok">✓ Cotes complètes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/03032026/R3/C3/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row row-lost">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-lost">✗ Perdu</span>
+      <span class="model-badge model-rule">Règles</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#8</span>MAKARA DU RAVARY</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>12.00</strong></span>
+        <span>Modèle : <strong>14%</strong></span>
+        <span>Marché : <strong>7%</strong></span>
+        <span class="ev ev-high">EV 1.95</span>
+      </div>
+      <div class="result-line"><span class="finish-pos">Arrivé 4e</span> · Vainqueur : <span class="winner-name">MADISON DANICA</span></div>
+    </div>
+    <div class="stake-col">
+      <div class="pnl-neg">-2.0 €</div>
+      <div class="stake-label">perte</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">AGEN LA GARENNE · R3·C4</span>
+    <span class="race-meta">
+      <span>13:28</span><span>2575 m</span><span>11 partants</span>
+    </span>
+    <span class="odds-tag odds-ok">✓ Cotes complètes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/03032026/R3/C4/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row row-lost">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-lost">✗ Perdu</span>
+      <span class="model-badge model-rule">Règles</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#3</span>NUCERA BELLA</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>16.00</strong></span>
+        <span>Modèle : <strong>16%</strong></span>
+        <span>Marché : <strong>5%</strong></span>
+        <span class="ev ev-high">EV 2.91</span>
+      </div>
+      <div class="result-line"><span class="finish-pos">Arrivé 3e</span> · Vainqueur : <span class="winner-name">NOSTARMAGNAC</span></div>
+    </div>
+    <div class="stake-col">
+      <div class="pnl-neg">-2.0 €</div>
+      <div class="stake-label">perte</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">AGEN LA GARENNE · R3·C7</span>
+    <span class="race-meta">
+      <span>15:22</span><span>2050 m</span><span>8 partants</span>
+    </span>
+    <span class="odds-tag odds-ok">✓ Cotes complètes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/03032026/R3/C7/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row row-lost">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-lost">✗ Perdu</span>
+      <span class="model-badge model-rule">Règles</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#5</span>HERNANDO BELLO</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>6.40</strong></span>
+        <span>Modèle : <strong>18%</strong></span>
+        <span>Marché : <strong>14%</strong></span>
+        <span class="ev ev-mid">EV 1.29</span>
+      </div>
+      <div class="result-line"><span class="finish-pos">Arrivé 7e</span> · Vainqueur : <span class="winner-name">ZANZA FRANK</span></div>
+    </div>
+    <div class="stake-col">
+      <div class="pnl-neg">-2.0 €</div>
+      <div class="stake-label">perte</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">CAGNES/MER · R4·C2</span>
+    <span class="race-meta">
+      <span>17:07</span><span>2925 m</span><span>9 partants</span>
+    </span>
+    <span class="odds-tag odds-ok">✓ Cotes complètes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/03032026/R4/C2/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row row-lost">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-lost">✗ Perdu</span>
+      <span class="model-badge model-rule">Règles</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#4</span>LIPSTICK QUICK</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>4.30</strong></span>
+        <span>Modèle : <strong>20%</strong></span>
+        <span>Marché : <strong>20%</strong></span>
+        <span class="ev ev-mid">EV 1.00</span>
+      </div>
+      <div class="result-line"><span class="finish-pos">Arrivé 2e</span> · Vainqueur : <span class="winner-name">LOOK DES ECUS</span></div>
+    </div>
+    <div class="stake-col">
+      <div class="pnl-neg">-2.0 €</div>
+      <div class="stake-label">perte</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">CAGNES/MER · R4·C3</span>
+    <span class="race-meta">
+      <span>17:42</span><span>2925 m</span><span>7 partants</span>
+    </span>
+    <span class="odds-tag odds-ok">✓ Cotes complètes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/03032026/R4/C3/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row row-lost">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-lost">✗ Perdu</span>
+      <span class="model-badge model-rule">Règles</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#7</span>KENACHA</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>7.20</strong></span>
+        <span>Modèle : <strong>25%</strong></span>
+        <span>Marché : <strong>12%</strong></span>
+        <span class="ev ev-high">EV 2.08</span>
+      </div>
+      <div class="result-line"><span class="finish-pos">Arrivé 5e</span> · Vainqueur : <span class="winner-name">KATE DU RIL</span></div>
+    </div>
+    <div class="stake-col">
+      <div class="pnl-neg">-2.0 €</div>
+      <div class="stake-label">perte</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">MONS (GHLIN) · R5·C1</span>
+    <span class="race-meta">
+      <span>18:37</span><span>2300 m</span><span>16 partants</span>
+    </span>
+    <span class="odds-tag odds-ok">✓ Cotes complètes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/03032026/R5/C1/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row row-won">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-won">✓ Gagné</span>
+      <span class="model-badge model-rule">Règles</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#5</span>MISS TERBEKEN</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>10.00</strong></span>
+        <span>Modèle : <strong>10%</strong></span>
+        <span>Marché : <strong>8%</strong></span>
+        <span class="ev ev-mid">EV 1.26</span>
+      </div>
+      <div class="result-line"><span class="finish-pos">Arrivé 1er</span></div>
+    </div>
+    <div class="stake-col">
+      <div class="pnl-pos">+18.0 €</div>
+      <div class="stake-label">gain net</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">MONS (GHLIN) · R5·C2</span>
+    <span class="race-meta">
+      <span>19:19</span><span>2300 m</span><span>14 partants</span>
+    </span>
+    <span class="odds-tag odds-ok">✓ Cotes complètes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/03032026/R5/C2/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row row-lost">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-lost">✗ Perdu</span>
+      <span class="model-badge model-rule">Règles</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#13</span>SILVER MIND</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>8.80</strong></span>
+        <span>Modèle : <strong>11%</strong></span>
+        <span>Marché : <strong>9%</strong></span>
+        <span class="ev ev-mid">EV 1.18</span>
+      </div>
+      <div class="result-line"><span class="finish-pos">Arrivé 2e</span> · Vainqueur : <span class="winner-name">PRINCE CANTHIS</span></div>
+    </div>
+    <div class="stake-col">
+      <div class="pnl-neg">-2.0 €</div>
+      <div class="stake-label">perte</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">CAGNES/MER · R4·C6</span>
+    <span class="race-meta">
+      <span>19:34</span><span>2925 m</span><span>7 partants</span>
+    </span>
+    <span class="odds-tag odds-ok">✓ Cotes complètes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/03032026/R4/C6/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row row-lost">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-lost">✗ Perdu</span>
+      <span class="model-badge model-rule">Règles</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#3</span>MALIN DE L'ANTE</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>11.00</strong></span>
+        <span>Modèle : <strong>20%</strong></span>
+        <span>Marché : <strong>8%</strong></span>
+        <span class="ev ev-high">EV 2.65</span>
+      </div>
+      <div class="result-line"><span class="finish-pos">Arrivé 2e</span> · Vainqueur : <span class="winner-name">MAN ON FIRE</span></div>
+    </div>
+    <div class="stake-col">
+      <div class="pnl-neg">-2.0 €</div>
+      <div class="stake-label">perte</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">CAGNES/MER · R4·C7</span>
+    <span class="race-meta">
+      <span>20:04</span><span>2925 m</span><span>12 partants</span>
+    </span>
+    <span class="odds-tag odds-ok">✓ Cotes complètes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/03032026/R4/C7/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row row-lost">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-lost">✗ Perdu</span>
+      <span class="model-badge model-rule">Règles</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#8</span>MONA LISA GEDE</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>8.00</strong></span>
+        <span>Modèle : <strong>12%</strong></span>
+        <span>Marché : <strong>11%</strong></span>
+        <span class="ev ev-mid">EV 1.13</span>
+      </div>
+      <div class="result-line"><span class="finish-pos">Arrivé 3e</span> · Vainqueur : <span class="winner-name">MIMI RAUDIERE</span></div>
+    </div>
+    <div class="stake-col">
+      <div class="pnl-neg">-2.0 €</div>
+      <div class="stake-label">perte</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">CAGNES/MER · R4·C8</span>
+    <span class="race-meta">
+      <span>20:39</span><span>2150 m</span><span>11 partants</span>
+    </span>
+    <span class="odds-tag odds-ok">✓ Cotes complètes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/03032026/R4/C8/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row row-won">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-won">✓ Gagné</span>
+      <span class="model-badge model-rule">Règles</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#1</span>NINA TIME</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>7.00</strong></span>
+        <span>Modèle : <strong>13%</strong></span>
+        <span>Marché : <strong>12%</strong></span>
+        <span class="ev ev-mid">EV 1.09</span>
+      </div>
+      <div class="result-line"><span class="finish-pos">Arrivé 1er</span></div>
+    </div>
+    <div class="stake-col">
+      <div class="pnl-pos">+12.0 €</div>
+      <div class="stake-label">gain net</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">MONS (GHLIN) · R5·C5</span>
+    <span class="race-meta">
+      <span>20:55</span><span>2300 m</span><span>10 partants</span>
+    </span>
+    <span class="odds-tag odds-ok">✓ Cotes complètes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/03032026/R5/C5/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row row-won">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-won">✓ Gagné</span>
+      <span class="model-badge model-rule">Règles</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#3</span>MYSTERY S</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>7.00</strong></span>
+        <span>Modèle : <strong>15%</strong></span>
+        <span>Marché : <strong>13%</strong></span>
+        <span class="ev ev-mid">EV 1.23</span>
+      </div>
+      <div class="result-line"><span class="finish-pos">Arrivé 1er</span></div>
+    </div>
+    <div class="stake-col">
+      <div class="pnl-pos">+12.0 €</div>
+      <div class="stake-label">gain net</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">MONS (GHLIN) · R5·C6</span>
+    <span class="race-meta">
+      <span>21:20</span><span>1750 m</span><span>9 partants</span>
+    </span>
+    <span class="odds-tag odds-ok">✓ Cotes complètes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/03032026/R5/C6/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row row-won">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-won">✓ Gagné</span>
+      <span class="model-badge model-rule">Règles</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#9</span>PLACEYOURBET SB</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>11.00</strong></span>
+        <span>Modèle : <strong>13%</strong></span>
+        <span>Marché : <strong>6%</strong></span>
+        <span class="ev ev-high">EV 2.09</span>
+      </div>
+      <div class="result-line"><span class="finish-pos">Arrivé 1er</span></div>
+    </div>
+    <div class="stake-col">
+      <div class="pnl-pos">+20.0 €</div>
+      <div class="stake-label">gain net</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">MONS (GHLIN) · R5·C7</span>
+    <span class="race-meta">
+      <span>21:51</span><span>2300 m</span><span>9 partants</span>
+    </span>
+    <span class="odds-tag odds-ok">✓ Cotes complètes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/03032026/R5/C7/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row row-lost">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-lost">✗ Perdu</span>
+      <span class="model-badge model-rule">Règles</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#8</span>JIVAGO DU VIVIER</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>6.60</strong></span>
+        <span>Modèle : <strong>18%</strong></span>
+        <span>Marché : <strong>13%</strong></span>
+        <span class="ev ev-high">EV 1.38</span>
+      </div>
+      <div class="result-line"><span class="finish-pos">Arrivé 7e</span> · Vainqueur : <span class="winner-name">JACK FLAC</span></div>
+    </div>
+    <div class="stake-col">
+      <div class="pnl-neg">-2.0 €</div>
+      <div class="stake-label">perte</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="race-block">
+  <div class="race-header">
+    <span class="race-ref">MONS (GHLIN) · R5·C9</span>
+    <span class="race-meta">
+      <span>22:49</span><span>1750 m</span><span>6 partants</span>
+    </span>
+    <span class="odds-tag odds-ok">✓ Cotes complètes</span>
+    <a class="pmu-link" href="https://www.pmu.fr/turf/03032026/R5/C9/" target="_blank">↗ pmu.fr</a>
+  </div>
+    <div class="bet-row row-won">
+    <div>
+      <span class="badge badge-win">Gagnant</span>
+      <span class="status-badge status-won">✓ Gagné</span>
+      <span class="model-badge model-rule">Règles</span>
+    </div>
+    <div>
+      <div class="horse-line"><span class="horse-num">#2</span>NAVAJO DE NIEL</div>
+      <div class="bet-stats">
+        <span>Cote : <strong>3.90</strong></span>
+        <span>Modèle : <strong>34%</strong></span>
+        <span>Marché : <strong>20%</strong></span>
+        <span class="ev ev-high">EV 1.70</span>
+      </div>
+      <div class="result-line"><span class="finish-pos">Arrivé 1er</span></div>
+    </div>
+    <div class="stake-col">
+      <div class="pnl-pos">+5.8 €</div>
+      <div class="stake-label">gain net</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">Système hippique PMU — paper trading uniquement</div>
+</body>
+</html>
