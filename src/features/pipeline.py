@@ -88,8 +88,9 @@ def compute_features(
     jockey_sql = f"""
         SELECT
             ru.runner_id,
-            COUNT(h.runner_id)                                                    AS jockey_starts_before,
-            COALESCE(SUM(CASE WHEN h.finish_position = 1 THEN 1 ELSE 0 END), 0)  AS jockey_wins_before
+            COUNT(hr.race_id)                                                     AS jockey_starts_before,
+            COALESCE(SUM(CASE WHEN hr.race_id IS NOT NULL
+                               AND h.finish_position = 1 THEN 1 ELSE 0 END), 0)  AS jockey_wins_before
         FROM runners ru
         JOIN races ra ON ra.race_id = ru.race_id
         LEFT JOIN runners h ON h.jockey_name = ru.jockey_name
@@ -110,8 +111,9 @@ def compute_features(
     trainer_sql = f"""
         SELECT
             ru.runner_id,
-            COUNT(h.runner_id)                                                    AS trainer_starts_before,
-            COALESCE(SUM(CASE WHEN h.finish_position = 1 THEN 1 ELSE 0 END), 0)  AS trainer_wins_before
+            COUNT(hr.race_id)                                                     AS trainer_starts_before,
+            COALESCE(SUM(CASE WHEN hr.race_id IS NOT NULL
+                               AND h.finish_position = 1 THEN 1 ELSE 0 END), 0)  AS trainer_wins_before
         FROM runners ru
         JOIN races ra ON ra.race_id = ru.race_id
         LEFT JOIN runners h ON h.trainer_name = ru.trainer_name
@@ -129,14 +131,17 @@ def compute_features(
     )
 
     # --- 5. Horse-level stats from our own race history (no leakage) ---
+    # COUNT(hr.race_id) instead of COUNT(prev.runner_id): hr is NULL when the
+    # LEFT JOIN date filter fails (future races), so only past races are counted.
     horse_sql = f"""
         SELECT
             ru.runner_id,
             ra.date                                                                AS race_date,
             ra.hippodrome                                                          AS race_hippodrome,
-            COUNT(prev.runner_id)                                                  AS horse_n_runs,
-            SUM(CASE WHEN prev.finish_position = 1 THEN 1.0 ELSE 0.0 END)
-                / NULLIF(COUNT(prev.runner_id), 0)                                AS horse_win_rate,
+            COUNT(hr.race_id)                                                      AS horse_n_runs,
+            COALESCE(SUM(CASE WHEN hr.race_id IS NOT NULL
+                               AND prev.finish_position = 1 THEN 1.0 ELSE 0.0 END), 0)
+                / NULLIF(COUNT(hr.race_id), 0)                                    AS horse_win_rate,
             MAX(hr.date)                                                           AS last_race_date,
             SUM(CASE WHEN hr.hippodrome = ra.hippodrome
                       AND prev.finish_position = 1 THEN 1.0 ELSE 0.0 END)
