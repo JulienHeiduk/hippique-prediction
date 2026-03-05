@@ -8,6 +8,8 @@ from pathlib import Path
 from loguru import logger
 
 from src.scraper import get_connection, run_pipeline
+from src.features.pipeline import compute_features
+from src.model.lgbm import train_lgbm, save_lgbm_model, load_lgbm_model, score_lgbm
 from src.trading.engine import generate_bets, resolve_bets
 from src.trading.reporter import export_bets_html
 
@@ -64,8 +66,29 @@ def run_morning_session(date: str | None = None) -> None:
 
     conn = get_connection()
     try:
-        bets = generate_bets(conn, date)
-        logger.info("=== {} bets logged for {} ===", len(bets), date)
+        # Retrain LightGBM on all historical data (races with known results)
+        hist_df = compute_features(conn)
+        lgbm_model = None
+        if not hist_df.empty:
+            try:
+                lgbm_model = train_lgbm(hist_df)
+                save_lgbm_model(lgbm_model)
+            except Exception as exc:
+                logger.warning("LightGBM training failed: {} — skipping", exc)
+
+        # Rule-based bets
+        bets_rb = generate_bets(conn, date)
+
+        # LightGBM bets
+        bets_lgbm = []
+        if lgbm_model is not None:
+            lgbm_scorer = lambda df, m=lgbm_model: score_lgbm(df, m)
+            bets_lgbm = generate_bets(conn, date, scorer_fn=lgbm_scorer, model_source="lgbm")
+
+        logger.info(
+            "=== {} rule-based + {} lgbm bets logged for {} ===",
+            len(bets_rb), len(bets_lgbm), date,
+        )
         report_path = export_bets_html(conn, date)
         logger.info("Bet sheet saved → {}", report_path)
         _git_push(report_path)
@@ -99,8 +122,20 @@ def run_hourly_update(date: str | None = None) -> None:
     conn = get_connection()
     try:
         now = datetime.now(tz=timezone.utc)
-        bets = generate_bets(conn, date, min_race_time=now)
-        logger.info("{} bets refreshed for {}", len(bets), date)
+        lgbm_model = load_lgbm_model()
+        lgbm_scorer = (lambda df, m=lgbm_model: score_lgbm(df, m)) if lgbm_model else None
+
+        bets_rb = generate_bets(conn, date, min_race_time=now)
+        bets_lgbm = []
+        if lgbm_scorer:
+            bets_lgbm = generate_bets(
+                conn, date, scorer_fn=lgbm_scorer, model_source="lgbm", min_race_time=now
+            )
+
+        logger.info(
+            "{} rule-based + {} lgbm bets refreshed for {}",
+            len(bets_rb), len(bets_lgbm), date,
+        )
         report_path = export_bets_html(conn, date)
         logger.info("Bet sheet updated → {}", report_path)
         _git_push(report_path)

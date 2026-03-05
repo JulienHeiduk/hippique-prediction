@@ -7,6 +7,8 @@ ROOT = Path(__file__).parent.parent
 DB_PATH = ROOT / "data" / "processed" / "hippique.duckdb"
 RAW_DIR = ROOT / "data" / "raw"
 LOG_DIR = ROOT / "logs"
+MODEL_DIR = ROOT / "data" / "models"
+LGBM_MODEL_PATH = MODEL_DIR / "lgbm_ranker.txt"
 
 # PMU API  (date format in URLs: DDMMYYYY)
 PMU_BASE = "https://offline.turfinfo.api.pmu.fr/rest/client/7"

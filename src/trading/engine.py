@@ -134,6 +134,7 @@ def generate_bets(
     scorer_fn: Callable[[pd.DataFrame], pd.Series] | None = None,
     bet_types: list[str] | None = None,
     min_race_time: datetime | None = None,
+    model_source: str = "rule_based",
 ) -> list[dict]:
     """Score today's runners and log EV+ bets to the bets table.
 
@@ -193,6 +194,7 @@ def generate_bets(
 
     bets: list[dict] = []
     now = datetime.now(tz=timezone.utc)
+    _sfx = "" if model_source == "rule_based" else f"_{model_source}"
 
     for race_id, race_df in df.groupby("race_id"):
         race_df = race_df.copy().reset_index(drop=True)
@@ -223,7 +225,7 @@ def generate_bets(
             ev_ratio = model_prob_top1 / implied_prob_top1 if implied_prob_top1 > 0 else 0.0
 
             if model_prob_top1 > implied_prob_top1 * ev_threshold:
-                bet_id_win = f"{race_id}_win"
+                bet_id_win = f"{race_id}_win{_sfx}"
                 existing_win = existing_map.get(bet_id_win, {})
 
                 # Never overwrite a resolved bet
@@ -255,6 +257,7 @@ def generate_bets(
                         "pnl": None,
                         "created_at": existing_win.get("created_at") or now,
                         "resolved_at": None,
+                        "model_source": model_source,
                     }
                     upsert_bet(conn, bet)
                     bets.append(bet)
@@ -281,7 +284,7 @@ def generate_bets(
             ev_ratio_duo = combined_model_prob / combined_implied_prob if combined_implied_prob > 0 else 0.0
 
             if combined_model_prob > combined_implied_prob * ev_threshold:
-                bet_id_duo = f"{race_id}_duo"
+                bet_id_duo = f"{race_id}_duo{_sfx}"
                 existing_duo = existing_map.get(bet_id_duo, {})
 
                 # Never overwrite a resolved bet
@@ -314,6 +317,7 @@ def generate_bets(
                         "pnl": None,
                         "created_at": existing_duo.get("created_at") or now,
                         "resolved_at": None,
+                        "model_source": model_source,
                     }
                     upsert_bet(conn, bet)
                     bets.append(bet)
@@ -489,6 +493,7 @@ def resolve_bets(
             "pnl": pnl,
             "created_at": bet.get("created_at"),
             "resolved_at": now,
+            "model_source": bet.get("model_source", "rule_based"),
         }
         upsert_bet(conn, updated_bet)
 

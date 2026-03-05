@@ -144,6 +144,19 @@ _HTML_TEMPLATE = """\
   .status-won     {{ background: #2e7d32; color: #fff; }}
   .status-lost    {{ background: #c62828; color: #fff; }}
   .status-pending {{ background: #757575; color: #fff; }}
+  .model-badge {{
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .6px;
+    text-transform: uppercase;
+    margin-left: 6px;
+    vertical-align: middle;
+  }}
+  .model-rule {{ background: #fff8e1; color: #f57f17; }}
+  .model-lgbm {{ background: #e8eaf6; color: #283593; }}
   .horse-line {{
     font-size: 15px;
     font-weight: 600;
@@ -259,6 +272,7 @@ _BET_ROW = """\
     <div>
       <span class="badge badge-{bet_type}">{bet_type_label}</span>
       <span class="status-badge status-{status}">{status_label}</span>
+      {model_badge}
     </div>
     <div>
       <div class="horse-line">{horses}</div>
@@ -406,6 +420,12 @@ def export_bets_html(
     total_pnl   = sum(b.get("pnl")   or 0 for b in resolved)
     roi = total_pnl / total_stake if total_stake > 0 else None
 
+    # Per-model P&L
+    rb_resolved   = [b for b in resolved if b.get("model_source", "rule_based") == "rule_based"]
+    lgbm_resolved = [b for b in resolved if b.get("model_source") == "lgbm"]
+    rb_pnl   = sum(b.get("pnl") or 0 for b in rb_resolved)
+    lgbm_pnl = sum(b.get("pnl") or 0 for b in lgbm_resolved)
+
     def _card(val: str, lbl: str, val_class: str = "") -> str:
         return _SUMMARY_CARD.format(val=val, lbl=lbl, val_class=val_class)
 
@@ -423,6 +443,18 @@ def export_bets_html(
         ]
         if roi is not None:
             cards.append(_card(f"{roi:+.0%}", "ROI", roi_class))
+        if rb_resolved:
+            cards.append(_card(
+                f"{rb_pnl:+.1f} €",
+                "P&amp;L Règles",
+                "val-pos" if rb_pnl >= 0 else "val-neg",
+            ))
+        if lgbm_resolved:
+            cards.append(_card(
+                f"{lgbm_pnl:+.1f} €",
+                "P&amp;L LightGBM",
+                "val-pos" if lgbm_pnl >= 0 else "val-neg",
+            ))
         summary_html = '<div class="summary">' + "".join(cards) + "</div>"
 
     # ── 6. Group bets by race ───────────────────────────────────────────────
@@ -499,6 +531,12 @@ def export_bets_html(
                     num2 = _extract_horse_num(b.get("runner_id_2") or "")
                     horses_html += f"  +  {_horse_tag(num2, b.get('horse_name_2'))}"
 
+                model_source = b.get("model_source", "rule_based")
+                if model_source == "lgbm":
+                    model_badge = '<span class="model-badge model-lgbm">LightGBM</span>'
+                else:
+                    model_badge = '<span class="model-badge model-rule">Règles</span>'
+
                 morning_odds = b.get("morning_odds")
                 odds_str   = f"{morning_odds:.2f}" if morning_odds else "N/A"
                 model_prob = b.get("model_prob") or 0.0
@@ -549,6 +587,7 @@ def export_bets_html(
                     bet_type_label=bet_type_label,
                     status=status,
                     status_label=status_label,
+                    model_badge=model_badge,
                     horses=horses_html,
                     odds=odds_str,
                     model_pct=f"{model_prob:.0%}",

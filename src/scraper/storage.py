@@ -80,27 +80,32 @@ def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
     """)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS bets (
-            bet_id       VARCHAR PRIMARY KEY,
-            race_id      VARCHAR NOT NULL,
-            date         VARCHAR NOT NULL,
-            hippodrome   VARCHAR,
-            bet_type     VARCHAR NOT NULL,
-            runner_id_1  VARCHAR NOT NULL,
-            runner_id_2  VARCHAR,
-            horse_name_1 VARCHAR,
-            horse_name_2 VARCHAR,
-            morning_odds DOUBLE,
-            model_prob   DOUBLE,
-            implied_prob DOUBLE,
-            ev_ratio     DOUBLE,
-            kelly_stake  DOUBLE,
-            stake        DOUBLE,
-            status       VARCHAR DEFAULT 'pending',
-            pnl          DOUBLE,
-            created_at   TIMESTAMP,
-            resolved_at  TIMESTAMP
+            bet_id        VARCHAR PRIMARY KEY,
+            race_id       VARCHAR NOT NULL,
+            date          VARCHAR NOT NULL,
+            hippodrome    VARCHAR,
+            bet_type      VARCHAR NOT NULL,
+            runner_id_1   VARCHAR NOT NULL,
+            runner_id_2   VARCHAR,
+            horse_name_1  VARCHAR,
+            horse_name_2  VARCHAR,
+            morning_odds  DOUBLE,
+            model_prob    DOUBLE,
+            implied_prob  DOUBLE,
+            ev_ratio      DOUBLE,
+            kelly_stake   DOUBLE,
+            stake         DOUBLE,
+            status        VARCHAR DEFAULT 'pending',
+            pnl           DOUBLE,
+            created_at    TIMESTAMP,
+            resolved_at   TIMESTAMP,
+            model_source  VARCHAR DEFAULT 'rule_based'
         )
     """)
+    # Idempotent migration for existing DBs
+    conn.execute(
+        "ALTER TABLE bets ADD COLUMN IF NOT EXISTS model_source VARCHAR DEFAULT 'rule_based'"
+    )
     logger.debug("DuckDB schema initialised (idempotent)")
 
 
@@ -196,7 +201,7 @@ def upsert_horse_history(conn: duckdb.DuckDBPyConnection, rows: list[dict]) -> N
 def upsert_bet(conn: duckdb.DuckDBPyConnection, bet: dict) -> None:
     conn.execute("""
         INSERT OR REPLACE INTO bets VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
     """, [
         bet.get("bet_id"),
@@ -218,4 +223,5 @@ def upsert_bet(conn: duckdb.DuckDBPyConnection, bet: dict) -> None:
         bet.get("pnl"),
         bet.get("created_at"),
         bet.get("resolved_at"),
+        bet.get("model_source", "rule_based"),
     ])

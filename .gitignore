@@ -10,8 +10,10 @@ build/
 # Data (keep structure, ignore content)
 data/raw/*
 data/processed/*
+data/models/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+!data/models/.gitkeep
 
 # Logs
 logs/*.log
