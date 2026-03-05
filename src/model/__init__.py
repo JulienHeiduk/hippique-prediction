@@ -7,7 +7,10 @@ from src.model.scorer import (
     score_combined,
     optimize_weights,
 )
-from src.model.lgbm import train_lgbm, score_lgbm, save_lgbm_model, load_lgbm_model
+from src.model.lgbm import (
+    train_lgbm, score_lgbm, save_lgbm_model, load_lgbm_model,
+    backtest_lgbm_walkforward,
+)
 
 __all__ = [
     "backtest",
@@ -22,4 +25,5 @@ __all__ = [
     "score_lgbm",
     "save_lgbm_model",
     "load_lgbm_model",
+    "backtest_lgbm_walkforward",
 ]

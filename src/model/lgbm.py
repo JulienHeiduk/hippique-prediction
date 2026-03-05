@@ -2,11 +2,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pandas as pd
 from loguru import logger
 
 from config.settings import LGBM_MODEL_PATH
+
+if TYPE_CHECKING:
+    from src.model.backtest import BacktestReport
 
 # Features used for training and inference (must exist in the features DataFrame)
 FEATURES = [
@@ -115,7 +119,7 @@ def score_lgbm(df: pd.DataFrame, model=None) -> pd.Series:
         return pd.Series(0.0, index=df["runner_id"])
 
     X = _prepare_X(df)
-    raw = model.predict(X)
+    raw = model.predict(X, num_iteration=model.best_iteration if hasattr(model, "best_iteration") else None)
     result = pd.Series(raw, index=df["runner_id"].values)
 
     # Shift per race so minimum score = 0 (LightGBM raw scores can be negative;
@@ -130,3 +134,77 @@ def score_lgbm(df: pd.DataFrame, model=None) -> pd.Series:
         result = result - result.min()
 
     return result
+
+
+def backtest_lgbm_walkforward(
+    df: pd.DataFrame,
+    min_train_days: int = 30,
+    bet_type: str = "win",
+    ev_filter: bool = False,
+) -> "BacktestReport":
+    """Walk-forward backtest for LightGBM — no data leakage.
+
+    For each test date (after the first min_train_days), trains the model
+    exclusively on all races *before* that date, then scores the test-date
+    runners. P&L is computed via the standard backtest() function.
+
+    Args:
+        df:             Full features DataFrame from compute_features().
+        min_train_days: Minimum number of past days required before testing.
+        bet_type:       "win", "place", or "duo".
+        ev_filter:      Apply EV filter (model_prob > implied_prob).
+
+    Returns:
+        BacktestReport aggregating all out-of-sample test days.
+    """
+    from src.model.backtest import backtest, BacktestReport
+
+    dates = sorted(df["date"].unique())
+    if len(dates) <= min_train_days:
+        raise ValueError(
+            f"Need more than {min_train_days} dates of data, got {len(dates)}"
+        )
+
+    test_dates = dates[min_train_days:]
+    full_report = BacktestReport(model_name="lgbm_walkforward", bet_type=bet_type)
+
+    logger.info(
+        "Walk-forward backtest: {} train warmup / {} test dates",
+        min_train_days, len(test_dates),
+    )
+
+    for i, test_date in enumerate(test_dates):
+        train_df = df[df["date"] < test_date]
+        test_df  = df[df["date"] == test_date]
+
+        if train_df.empty or test_df.empty:
+            continue
+
+        try:
+            model = train_lgbm(train_df)
+        except Exception as exc:
+            logger.warning("Training failed for test_date={}: {}", test_date, exc)
+            continue
+
+        scorer = lambda d, m=model: score_lgbm(d, m)
+        day_report = backtest(
+            test_df, scorer,
+            model_name="lgbm",
+            bet_type=bet_type,
+            ev_filter=ev_filter,
+        )
+        full_report.bets.extend(day_report.bets)
+
+        if (i + 1) % 10 == 0:
+            logger.info(
+                "  {}/{} test dates done — running ROI={:.1%}",
+                i + 1, len(test_dates), full_report.roi,
+            )
+
+    logger.info(
+        "Walk-forward done: {} bets | ROI={:.1%} | hit={:.1%} | P&L={:.2f}",
+        len(full_report.bets), full_report.roi,
+        full_report.hit_rate,
+        sum(b.pnl for b in full_report.bets),
+    )
+    return full_report
