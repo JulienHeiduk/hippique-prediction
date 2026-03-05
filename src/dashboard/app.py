@@ -17,19 +17,25 @@ from config.settings import ROOT
 REPORTS_DIR = ROOT / "data" / "reports"
 
 
-def _get_cumulative_pnl() -> tuple[float | None, str | None]:
-    """Return (total P&L, error_message) across all resolved bets."""
-    try:
-        from config.settings import DB_PATH
-        import duckdb
-        conn = duckdb.connect(str(DB_PATH), read_only=True)
-        result = conn.execute(
-            "SELECT COALESCE(SUM(pnl), 0) FROM bets WHERE status IN ('won', 'lost')"
-        ).fetchone()
-        conn.close()
-        return (float(result[0]) if result else None), None
-    except Exception as e:
-        return None, str(e)
+def _get_cumulative_pnl() -> float | None:
+    """Return cumulative P&L by parsing the P&L value from each HTML report file."""
+    import re
+    total = 0.0
+    found = False
+    for html_file in sorted(REPORTS_DIR.glob("bets_*.html")):
+        try:
+            content = html_file.read_text(encoding="utf-8")
+            match = re.search(
+                r'<div class="val[^"]*">([+\-]?\d+\.?\d*)\s*€</div>'
+                r'\s*<div class="lbl">P&amp;L</div>',
+                content,
+            )
+            if match:
+                total += float(match.group(1))
+                found = True
+        except Exception:
+            pass
+    return total if found else None
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -63,15 +69,8 @@ with st.sidebar:
         selected_path = options[selected_label]
 
         st.divider()
-        cum_pnl, pnl_err = _get_cumulative_pnl()
-        from config.settings import DB_PATH
-        import duckdb as _ddb
-        _c = _ddb.connect(str(DB_PATH), read_only=True)
-        st.write("DEBUG path=", str(DB_PATH), "| exists=", DB_PATH.exists(), "| bets rows=", _c.execute("SELECT COUNT(*) FROM bets").fetchone()[0], "| pnl=", cum_pnl, "| err=", pnl_err)
-        _c.close()
-        if pnl_err:
-            st.warning(f"P&L indisponible : {pnl_err}")
-        elif cum_pnl is not None:
+        cum_pnl = _get_cumulative_pnl()
+        if cum_pnl is not None:
             st.metric("Total gains / pertes", f"{cum_pnl:+.1f} €")
 
     st.divider()
