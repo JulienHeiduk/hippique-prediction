@@ -64,25 +64,11 @@ with st.sidebar:
 
         st.divider()
         cum_pnl, pnl_err = _get_cumulative_pnl()
+        st.write("DEBUG pnl=", cum_pnl, "err=", pnl_err)
         if pnl_err:
             st.warning(f"P&L indisponible : {pnl_err}")
         elif cum_pnl is not None:
-            color = "#2e7d32" if cum_pnl >= 0 else "#c62828"
-            sign = "+" if cum_pnl >= 0 else ""
-            st.markdown(
-                f"""
-                <div style="background:#fff;border-radius:8px;padding:12px 18px;
-                            box-shadow:0 1px 3px rgba(0,0,0,.08);text-align:center;">
-                  <div style="font-size:24px;font-weight:700;color:{color};">
-                    {sign}{cum_pnl:.1f} €
-                  </div>
-                  <div style="font-size:11px;color:#888;margin-top:2px;">
-                    Total gains / pertes
-                  </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+            st.metric("Total gains / pertes", f"{cum_pnl:+.1f} €")
 
     st.divider()
     st.caption("Paper trading uniquement — Trot PMU")
