@@ -420,12 +420,6 @@ def export_bets_html(
     total_pnl   = sum(b.get("pnl")   or 0 for b in resolved)
     roi = total_pnl / total_stake if total_stake > 0 else None
 
-    # Per-model P&L
-    rb_resolved   = [b for b in resolved if b.get("model_source", "rule_based") == "rule_based"]
-    lgbm_resolved = [b for b in resolved if b.get("model_source") == "lgbm"]
-    rb_pnl   = sum(b.get("pnl") or 0 for b in rb_resolved)
-    lgbm_pnl = sum(b.get("pnl") or 0 for b in lgbm_resolved)
-
     def _card(val: str, lbl: str, val_class: str = "") -> str:
         return _SUMMARY_CARD.format(val=val, lbl=lbl, val_class=val_class)
 
@@ -443,18 +437,6 @@ def export_bets_html(
         ]
         if roi is not None:
             cards.append(_card(f"{roi:+.0%}", "ROI", roi_class))
-        if rb_resolved:
-            cards.append(_card(
-                f"{rb_pnl:+.1f} €",
-                "P&amp;L WIN (Règles)",
-                "val-pos" if rb_pnl >= 0 else "val-neg",
-            ))
-        if lgbm_resolved:
-            cards.append(_card(
-                f"{lgbm_pnl:+.1f} €",
-                "P&amp;L DUO (LightGBM)",
-                "val-pos" if lgbm_pnl >= 0 else "val-neg",
-            ))
         summary_html = '<div class="summary">' + "".join(cards) + "</div>"
 
     # ── 6. Group bets by race ───────────────────────────────────────────────
