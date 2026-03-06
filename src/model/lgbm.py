@@ -50,7 +50,7 @@ def _prepare_X(df: pd.DataFrame) -> pd.DataFrame:
     """Extract and fill feature matrix."""
     X = df.reindex(columns=FEATURES).copy()
     for col in FEATURES:
-        X[col] = pd.to_numeric(X[col], errors="coerce")
+        X[col] = pd.to_numeric(X[col], errors="coerce").astype(float)
         median = X[col].median()
         X[col] = X[col].fillna(median if pd.notna(median) else 0.0)
     return X
