@@ -18,30 +18,6 @@ REPORTS_DIR = ROOT / "data" / "reports"
 MODEL_REPORT = REPORTS_DIR / "model_report.html"
 
 
-def _get_cumulative_pnl() -> float | None:
-    """Parse cumulative P&L from all HTML report files.
-
-    Returns the total P&L float, or None when no resolved bets exist yet.
-    """
-    import re
-
-    _VAL = r'<div class="val[^"]*">([+\-]?\d+\.?\d*)\s*€</div>\s*<div class="lbl">P&amp;L</div>'
-    pat = re.compile(_VAL)
-
-    total = 0.0
-    found = False
-    for html_file in sorted(REPORTS_DIR.glob("bets_*.html")):
-        try:
-            content = html_file.read_text(encoding="utf-8")
-            m = pat.search(content)
-            if m:
-                total += float(m.group(1))
-                found = True
-        except Exception:
-            pass
-
-    return total if found else None
-
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="PMU Hippique — Paper Trading",
@@ -51,7 +27,6 @@ st.set_page_config(
 
 # ── Collect available reports ─────────────────────────────────────────────────
 html_files = sorted(REPORTS_DIR.glob("bets_*.html"), reverse=True) if REPORTS_DIR.exists() else []
-perf_file  = REPORTS_DIR / "performance.html"
 
 
 def _label(p: Path) -> str:
@@ -74,16 +49,11 @@ with st.sidebar:
         selected_label = st.selectbox("Date", list(options.keys()))
         selected_path = options[selected_label]
 
-        st.divider()
-        pnl = _get_cumulative_pnl()
-        if pnl is not None:
-            st.metric("Total gains / pertes", f"{pnl:+.1f} €")
-
     st.divider()
     st.caption("Paper trading uniquement — Trot PMU")
 
 # ── Main — tabs ───────────────────────────────────────────────────────────────
-tab_bets, tab_perf, tab_model = st.tabs(["📋 Paris du jour", "📈 Performance", "🤖 Modèle LightGBM"])
+tab_bets, tab_model = st.tabs(["📋 Paris du jour", "🤖 Modèle LightGBM"])
 
 with tab_bets:
     if selected_path is None:
@@ -94,13 +64,6 @@ with tab_bets:
     else:
         html_content = selected_path.read_text(encoding="utf-8")
         components.html(html_content, height=900, scrolling=True)
-
-with tab_perf:
-    if not perf_file.exists():
-        st.info("Le rapport de performance sera généré après la première soirée de résolution.")
-    else:
-        perf_content = perf_file.read_text(encoding="utf-8")
-        components.html(perf_content, height=900, scrolling=True)
 
 with tab_model:
     if not MODEL_REPORT.exists():
