@@ -229,8 +229,9 @@ def generate_bets(
     7. Return list of bet dicts
     """
     if scorer_fn is None:
-        from src.model.scorer import score_combined
-        scorer_fn = score_combined
+        from src.model.scorer import score_combined, load_rule_weights
+        weights = load_rule_weights()
+        scorer_fn = lambda df, w=weights: score_combined(df, **w)
 
     if bet_types is None:
         bet_types = ["win", "duo"]

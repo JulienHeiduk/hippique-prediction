@@ -1,10 +1,39 @@
 """Rule-based scorers and weight optimisation."""
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 
+from config.settings import MODEL_DIR
 from src.model.backtest import backtest
+
+RULE_WEIGHTS_PATH = MODEL_DIR / "rule_weights.json"
+
+_DEFAULT_WEIGHTS = {
+    "w_form": 0.35,
+    "w_odds": 0.40,
+    "w_drift": 0.15,
+    "w_jockey": 0.10,
+}
+
+
+def save_rule_weights(weights: dict, path: Path = RULE_WEIGHTS_PATH) -> Path:
+    """Save optimised rule weights to disk as JSON."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(weights, f, indent=2)
+    return path
+
+
+def load_rule_weights(path: Path = RULE_WEIGHTS_PATH) -> dict:
+    """Load rule weights from disk. Returns default weights if file not found."""
+    if not path.exists():
+        return _DEFAULT_WEIGHTS.copy()
+    with open(path) as f:
+        return json.load(f)
 
 
 def score_baseline(df: pd.DataFrame) -> pd.Series:
