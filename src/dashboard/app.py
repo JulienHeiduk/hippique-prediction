@@ -15,6 +15,7 @@ import streamlit.components.v1 as components
 from config.settings import ROOT
 
 REPORTS_DIR = ROOT / "data" / "reports"
+MODEL_REPORT = REPORTS_DIR / "model_report.html"
 
 
 def _get_cumulative_pnl() -> float | None:
@@ -82,7 +83,7 @@ with st.sidebar:
     st.caption("Paper trading uniquement — Trot PMU")
 
 # ── Main — tabs ───────────────────────────────────────────────────────────────
-tab_bets, tab_perf = st.tabs(["📋 Paris du jour", "📈 Performance"])
+tab_bets, tab_perf, tab_model = st.tabs(["📋 Paris du jour", "📈 Performance", "🤖 Modèle LightGBM"])
 
 with tab_bets:
     if selected_path is None:
@@ -100,3 +101,10 @@ with tab_perf:
     else:
         perf_content = perf_file.read_text(encoding="utf-8")
         components.html(perf_content, height=900, scrolling=True)
+
+with tab_model:
+    if not MODEL_REPORT.exists():
+        st.info("Le rapport modèle sera généré après le premier entraînement quotidien (08:00).")
+    else:
+        model_content = MODEL_REPORT.read_text(encoding="utf-8")
+        components.html(model_content, height=1100, scrolling=True)

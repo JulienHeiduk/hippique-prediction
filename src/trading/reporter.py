@@ -608,6 +608,231 @@ def export_bets_html(
     return output_path
 
 
+def export_model_report_html(conn: duckdb.DuckDBPyConnection) -> Path:
+    """Generate a LightGBM model evaluation report and save to data/reports/model_report.html.
+
+    Includes feature importance, training data stats, in-sample ranking metrics
+    (top-1 / top-3 accuracy, NDCG@1), and a holdout quick evaluation.
+    """
+    import pandas as pd
+    from src.features.pipeline import compute_features
+    from src.model.lgbm import load_lgbm_model, score_lgbm, train_lgbm, FEATURES
+
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    output_path = REPORTS_DIR / "model_report.html"
+    generated_at = datetime.now().strftime("%d/%m/%Y %H:%M")
+
+    # ── Load model ───────────────────────────────────────────────────────────
+    model = load_lgbm_model()
+    if model is None:
+        html = f"""<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
+<title>Modèle — PMU</title></head><body>
+<h2>Modèle LightGBM non disponible.</h2>
+<p style="color:#888">Lancez un entraînement d'abord. Généré le {generated_at}</p>
+</body></html>"""
+        output_path.write_text(html, encoding="utf-8")
+        return output_path
+
+    # ── Load all historical features ─────────────────────────────────────────
+    df = compute_features(conn)
+    if df.empty:
+        html = f"""<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
+<title>Modèle — PMU</title></head><body>
+<h2>Aucune donnée historique disponible.</h2>
+<p style="color:#888">Généré le {generated_at}</p>
+</body></html>"""
+        output_path.write_text(html, encoding="utf-8")
+        return output_path
+
+    dates = sorted(df["date"].unique())
+    n_races   = df["race_id"].nunique()
+    n_runners = len(df)
+    date_min  = f"{dates[0][6:8]}/{dates[0][4:6]}/{dates[0][:4]}"
+    date_max  = f"{dates[-1][6:8]}/{dates[-1][4:6]}/{dates[-1][:4]}"
+    n_trees   = model.num_trees()
+
+    # ── Feature importance ───────────────────────────────────────────────────
+    importance = model.feature_importance(importance_type="gain")
+    feat_names = model.feature_name()
+    fi_df = pd.DataFrame({"feature": feat_names, "gain": importance})
+    fi_df = fi_df.sort_values("gain", ascending=False).reset_index(drop=True)
+    fi_df["gain_pct"] = fi_df["gain"] / fi_df["gain"].sum() * 100
+
+    fi_chart_b64 = ""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        top_n = min(20, len(fi_df))
+        top_fi = fi_df.head(top_n).iloc[::-1]
+
+        fig, ax = plt.subplots(figsize=(8, top_n * 0.38 + 1.2))
+        ax.barh(top_fi["feature"], top_fi["gain_pct"], color="#1565c0", alpha=0.82)
+        ax.set_xlabel("Importance (% gain)", fontsize=10)
+        ax.set_title("Importance des variables — LightGBM LambdaRank",
+                     fontsize=12, fontweight="bold")
+        ax.spines[["top", "right"]].set_visible(False)
+        ax.grid(axis="x", alpha=0.3)
+        for bar, val in zip(ax.patches, top_fi["gain_pct"]):
+            ax.text(bar.get_width() + 0.3, bar.get_y() + bar.get_height() / 2,
+                    f"{val:.1f}%", va="center", fontsize=8, color="#333")
+        plt.tight_layout()
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png", dpi=130, bbox_inches="tight")
+        plt.close(fig)
+        fi_chart_b64 = base64.b64encode(buf.getvalue()).decode()
+    except Exception:
+        pass
+
+    fi_chart_html = (
+        f'<img src="data:image/png;base64,{fi_chart_b64}" '
+        f'style="width:100%;max-width:800px;border-radius:8px;">'
+        if fi_chart_b64 else ""
+    )
+
+    # ── Ranking metrics helper ────────────────────────────────────────────────
+    def _ranking_metrics(eval_df: pd.DataFrame, eval_model):
+        scores = score_lgbm(eval_df, eval_model)
+        eval_df = eval_df.copy()
+        eval_df["_score"] = eval_df["runner_id"].map(
+            dict(zip(scores.index, scores.values))).fillna(0)
+        top1, top3, ndcg1, n = 0, 0, 0.0, 0
+        for _, rdf in eval_df.groupby("race_id"):
+            if len(rdf) < 2:
+                continue
+            rdf = rdf.sort_values("_score", ascending=False).reset_index(drop=True)
+            top_pick_pos  = int(rdf["finish_position"].iloc[0])   # finish pos of model's top pick
+            winner_in_top3 = (rdf["finish_position"][:3] == 1).any()
+            top1  += int(top_pick_pos == 1)
+            top3  += int(winner_in_top3)
+            ndcg1 += 1.0 if top_pick_pos == 1 else 0.0
+            n     += 1
+        if n == 0:
+            return 0.0, 0.0, 0.0, 0
+        return top1 / n, top3 / n, ndcg1 / n, n
+
+    # In-sample (full training data with the production model)
+    top1_is, top3_is, ndcg1_is, n_is = _ranking_metrics(df, model)
+
+    # Holdout: last N dates, model retrained on everything before
+    holdout_n = min(30, max(5, len(dates) // 5))
+    holdout_dates = set(dates[-holdout_n:])
+    train_df   = df[~df["date"].isin(holdout_dates)]
+    holdout_df = df[df["date"].isin(holdout_dates)]
+    top1_ho, top3_ho, ndcg1_ho, n_ho = 0.0, 0.0, 0.0, 0
+    if not holdout_df.empty and not train_df.empty:
+        try:
+            ho_model = train_lgbm(train_df)
+            top1_ho, top3_ho, ndcg1_ho, n_ho = _ranking_metrics(holdout_df, ho_model)
+        except Exception:
+            pass
+
+    # ── Feature importance table rows ─────────────────────────────────────────
+    fi_rows = ""
+    max_gain = fi_df["gain_pct"].max() or 1.0
+    for i, row in fi_df.iterrows():
+        bar_w = int(row["gain_pct"] / max_gain * 100)
+        fi_rows += f"""
+        <tr>
+          <td>{i+1}</td>
+          <td>{row['feature']}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div style="background:#1565c0;height:10px;width:{bar_w}%;border-radius:3px;min-width:2px"></div>
+              <span>{row['gain_pct']:.1f}%</span>
+            </div>
+          </td>
+        </tr>"""
+
+    def _pct(v):
+        color = "#2e7d32" if v >= 0.35 else ("#e65100" if v >= 0.25 else "#c62828")
+        return f'<span style="color:{color};font-weight:700">{v:.1%}</span>'
+
+    html = f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Modèle LightGBM — PMU</title>
+<style>
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+          font-size: 14px; background: #f4f5f7; color: #1a1a2e; padding: 24px 16px; }}
+  h1 {{ font-size: 22px; font-weight: 700; margin-bottom: 4px; }}
+  .subtitle {{ font-size: 13px; color: #666; margin-bottom: 20px; }}
+  .cards {{ display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }}
+  .card {{ background: #fff; border-radius: 8px; padding: 14px 20px;
+           box-shadow: 0 1px 3px rgba(0,0,0,.08); min-width: 120px; }}
+  .card .val {{ font-size: 20px; font-weight: 700; color: #1a1a2e; }}
+  .card .lbl {{ font-size: 11px; color: #888; margin-top: 2px; }}
+  .section-title {{ font-size: 16px; font-weight: 700; margin: 24px 0 10px; }}
+  .metrics-grid {{ display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }}
+  .metric-card {{ background:#fff; border-radius:8px; padding:14px 20px;
+                  box-shadow:0 1px 3px rgba(0,0,0,.08); flex:1; min-width:220px; }}
+  .metric-card h3 {{ font-size:13px; color:#555; margin-bottom:10px; font-weight:600; }}
+  .metric-row {{ display:flex; justify-content:space-between; font-size:13px; margin-top:6px; padding-top:4px; border-top:1px solid #f0f0f0; }}
+  .metric-row:first-of-type {{ border-top: none; margin-top: 0; }}
+  .chart-wrap {{ background:#fff; border-radius:10px; padding:16px;
+                 box-shadow:0 1px 4px rgba(0,0,0,.1); margin-bottom:24px; }}
+  table {{ width:100%; border-collapse:collapse; background:#fff; border-radius:10px;
+           overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,.10); }}
+  th {{ background:#1a1a2e; color:#fff; padding:10px 14px; text-align:left;
+        font-size:12px; font-weight:600; }}
+  td {{ padding:9px 14px; border-top:1px solid #eef0f4; font-size:13px; }}
+  tr:hover td {{ background:#f8f9fb; }}
+  .footer {{ margin-top:28px; font-size:11px; color:#aaa; text-align:center; }}
+  .tag {{ display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px;
+          font-weight:700; background:#e8eaf6; color:#283593; margin-left:6px; }}
+  .note {{ font-size:12px; color:#888; margin-top:6px; }}
+</style>
+</head>
+<body>
+<h1>Évaluation — LightGBM LambdaRank</h1>
+<p class="subtitle">Généré le {generated_at}</p>
+
+<div class="cards">
+  <div class="card"><div class="val">{n_races:,}</div><div class="lbl">Courses (entraînement)</div></div>
+  <div class="card"><div class="val">{n_runners:,}</div><div class="lbl">Chevaux</div></div>
+  <div class="card"><div class="val">{n_trees}</div><div class="lbl">Arbres de décision</div></div>
+  <div class="card"><div class="val">{len(FEATURES)}</div><div class="lbl">Variables</div></div>
+  <div class="card"><div class="val" style="font-size:14px;line-height:1.4">{date_min}<br>→ {date_max}</div><div class="lbl">Période historique</div></div>
+</div>
+
+<div class="section-title">Métriques de ranking</div>
+<div class="metrics-grid">
+  <div class="metric-card">
+    <h3>In-sample — {n_is:,} courses</h3>
+    <div class="metric-row"><span>Top-1 accuracy</span>{_pct(top1_is)}</div>
+    <div class="metric-row"><span>Top-3 accuracy</span>{_pct(top3_is)}</div>
+    <div class="metric-row"><span>NDCG@1</span>{_pct(ndcg1_is)}</div>
+    <p class="note">Modèle scoré sur ses propres données d'entraînement — optimiste.</p>
+  </div>
+  <div class="metric-card">
+    <h3>Holdout <span class="tag">quasi out-of-sample</span> — {n_ho:,} courses</h3>
+    <div class="metric-row"><span>Top-1 accuracy</span>{_pct(top1_ho)}</div>
+    <div class="metric-row"><span>Top-3 accuracy</span>{_pct(top3_ho)}</div>
+    <div class="metric-row"><span>NDCG@1</span>{_pct(ndcg1_ho)}</div>
+    <p class="note">Entraîné sur tout sauf les {holdout_n} derniers jours.</p>
+  </div>
+</div>
+
+<div class="section-title">Importance des variables</div>
+<div class="chart-wrap">{fi_chart_html}</div>
+
+<table>
+  <thead><tr><th>#</th><th>Variable</th><th>Importance (gain)</th></tr></thead>
+  <tbody>{fi_rows}</tbody>
+</table>
+
+<div class="footer">LightGBM LambdaRank · objectif lambdarank · métrique ndcg@1,3 · 300 estimateurs</div>
+</body>
+</html>"""
+
+    output_path.write_text(html, encoding="utf-8")
+    return output_path
+
+
 def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
     """Generate a cumulative performance report and save to data/reports/performance.html."""
     import pandas as pd

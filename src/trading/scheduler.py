@@ -11,7 +11,7 @@ from src.scraper import get_connection, run_pipeline
 from src.features.pipeline import compute_features
 from src.model.lgbm import train_lgbm, save_lgbm_model, load_lgbm_model, score_lgbm
 from src.trading.engine import generate_bets, resolve_bets
-from src.trading.reporter import export_bets_html, export_performance_html
+from src.trading.reporter import export_bets_html, export_performance_html, export_model_report_html
 
 
 def _git_push(path: Path) -> None:
@@ -62,6 +62,9 @@ def run_retrain_model() -> None:
         save_lgbm_model(model)
         logger.info("=== Model retrained on {} races / {} runners ===",
                     hist_df["race_id"].nunique(), len(hist_df))
+        model_report_path = export_model_report_html(conn)
+        logger.info("Model report saved → {}", model_report_path)
+        _git_push(model_report_path)
     except Exception as exc:
         logger.error("Model retraining failed: {}", exc)
     finally:
