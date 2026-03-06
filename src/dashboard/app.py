@@ -9,13 +9,44 @@ _ROOT = Path(__file__).parent.parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+import duckdb
 import streamlit as st
 import streamlit.components.v1 as components
 
-from config.settings import ROOT
+from config.settings import ROOT, DB_PATH
 
 REPORTS_DIR = ROOT / "data" / "reports"
 MODEL_REPORT = REPORTS_DIR / "model_report.html"
+
+
+@st.cache_data(ttl=300)
+def _get_pnl_stats() -> dict | None:
+    """Query cumulative P&L and basic stats from resolved bets (read-only)."""
+    if not DB_PATH.exists():
+        return None
+    try:
+        conn = duckdb.connect(str(DB_PATH), read_only=True)
+        row = conn.execute("""
+            SELECT
+                COUNT(*)                          AS n_bets,
+                SUM(CASE WHEN status='won' THEN 1 ELSE 0 END) AS n_won,
+                SUM(pnl)                          AS total_pnl,
+                SUM(stake)                        AS total_stake
+            FROM bets
+            WHERE status IN ('won', 'lost')
+        """).fetchone()
+        conn.close()
+        if row is None or row[0] == 0:
+            return None
+        n_bets, n_won, total_pnl, total_stake = row
+        return {
+            "n_bets": int(n_bets),
+            "n_won": int(n_won),
+            "total_pnl": float(total_pnl),
+            "roi": float(total_pnl) / float(total_stake) if total_stake else 0.0,
+        }
+    except Exception:
+        return None
 
 
 # ── Page config ───────────────────────────────────────────────────────────────
@@ -49,6 +80,17 @@ with st.sidebar:
         selected_label = st.selectbox("Date", list(options.keys()))
         selected_path = options[selected_label]
 
+    st.divider()
+    pnl_stats = _get_pnl_stats()
+    if pnl_stats:
+        delta_color = "normal" if pnl_stats["total_pnl"] >= 0 else "inverse"
+        st.metric(
+            "P&L cumulé",
+            f"{pnl_stats['total_pnl']:+.1f} €",
+            delta=f"ROI {pnl_stats['roi']:+.0%}",
+            delta_color=delta_color,
+        )
+        st.caption(f"{pnl_stats['n_won']}/{pnl_stats['n_bets']} paris gagnés")
     st.divider()
     st.caption("Paper trading uniquement — Trot PMU")
 
