@@ -1,6 +1,8 @@
 """HTML bet report generator."""
 from __future__ import annotations
 
+import base64
+import io
 from datetime import datetime
 from pathlib import Path
 
@@ -601,6 +603,213 @@ def export_bets_html(
         summary_html=summary_html,
         body="\n".join(body_parts),
     )
+
+    output_path.write_text(html, encoding="utf-8")
+    return output_path
+
+
+def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
+    """Generate a cumulative performance report and save to data/reports/performance.html."""
+    import pandas as pd
+
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    output_path = REPORTS_DIR / "performance.html"
+
+    # ── Load all resolved bets ───────────────────────────────────────────────
+    bets_df = conn.execute("""
+        SELECT date, bet_type, model_source, stake, pnl, status
+        FROM bets
+        WHERE status IN ('won', 'lost')
+        ORDER BY date
+    """).df()
+
+    generated_at = datetime.now().strftime("%d/%m/%Y %H:%M")
+
+    if bets_df.empty:
+        html = f"""<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
+<title>Performance — PMU</title></head><body>
+<h2>Aucune donnée résolue disponible.</h2>
+<p style="color:#888">Généré le {generated_at}</p></body></html>"""
+        output_path.write_text(html, encoding="utf-8")
+        return output_path
+
+    bets_df["date"] = bets_df["date"].astype(str)
+    bets_df["hit"] = bets_df["status"] == "won"
+
+    # ── Per-day summary ──────────────────────────────────────────────────────
+    daily = (
+        bets_df.groupby("date")
+        .agg(n_bets=("pnl", "count"), n_won=("hit", "sum"),
+             stake=("stake", "sum"), pnl=("pnl", "sum"))
+        .reset_index()
+    )
+    daily["roi"] = daily["pnl"] / daily["stake"]
+    daily["cum_pnl"] = daily["pnl"].cumsum()
+    daily["date_label"] = daily["date"].apply(
+        lambda d: f"{d[6:8]}/{d[4:6]}/{d[:4]}"
+    )
+
+    # ── Overall stats ────────────────────────────────────────────────────────
+    total_bets  = int(bets_df["hit"].count())
+    total_won   = int(bets_df["hit"].sum())
+    total_stake = float(bets_df["stake"].sum())
+    total_pnl   = float(bets_df["pnl"].sum())
+    total_roi   = total_pnl / total_stake if total_stake else 0.0
+
+    win_stats = bets_df[bets_df["bet_type"] == "win"]
+    duo_stats = bets_df[bets_df["bet_type"] == "duo"]
+    win_pnl  = float(win_stats["pnl"].sum()) if not win_stats.empty else 0.0
+    duo_pnl  = float(duo_stats["pnl"].sum()) if not duo_stats.empty else 0.0
+    win_roi  = win_pnl / float(win_stats["stake"].sum()) if not win_stats.empty else 0.0
+    duo_roi  = duo_pnl / float(duo_stats["stake"].sum()) if not duo_stats.empty else 0.0
+    win_hit  = float(win_stats["hit"].mean()) if not win_stats.empty else 0.0
+    duo_hit  = float(duo_stats["hit"].mean()) if not duo_stats.empty else 0.0
+
+    # ── Cumulative P&L chart ─────────────────────────────────────────────────
+    chart_b64 = ""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        fig, ax = plt.subplots(figsize=(10, 3.5))
+        x = list(range(len(daily)))
+        y = daily["cum_pnl"].tolist()
+        ax.plot(x, y, color="#1565c0", linewidth=2.5, zorder=3)
+        ax.fill_between(x, y, 0,
+                        where=[v >= 0 for v in y], alpha=0.12, color="#2e7d32")
+        ax.fill_between(x, y, 0,
+                        where=[v < 0 for v in y], alpha=0.12, color="#c62828")
+        ax.axhline(0, color="#aaa", linewidth=0.8, linestyle="--")
+        ax.set_xticks(x)
+        ax.set_xticklabels(daily["date_label"].tolist(), rotation=30, ha="right", fontsize=9)
+        ax.set_ylabel("P&L cumulé (€)", fontsize=10)
+        ax.set_title("P&L cumulé — stratégie hybride (WIN Règles + DUO LightGBM)",
+                     fontsize=12, fontweight="bold")
+        ax.grid(axis="y", alpha=0.3)
+        ax.spines[["top", "right"]].set_visible(False)
+        plt.tight_layout()
+
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png", dpi=140, bbox_inches="tight")
+        plt.close(fig)
+        chart_b64 = base64.b64encode(buf.getvalue()).decode()
+    except Exception:
+        pass
+
+    chart_html = (
+        f'<img src="data:image/png;base64,{chart_b64}" '
+        f'style="width:100%;max-width:900px;border-radius:8px;">'
+        if chart_b64 else ""
+    )
+
+    # ── Daily rows ───────────────────────────────────────────────────────────
+    def _pnl_style(v: float) -> str:
+        color = "#2e7d32" if v >= 0 else "#c62828"
+        return f'style="color:{color};font-weight:700"'
+
+    rows_html = ""
+    for _, r in daily.iterrows():
+        pnl_s = f"{r['pnl']:+.1f}"
+        cum_s = f"{r['cum_pnl']:+.1f}"
+        roi_s = f"{r['roi']:+.0%}"
+        hit_s = f"{r['n_won']}/{int(r['n_bets'])}"
+        rows_html += f"""
+        <tr>
+          <td>{r['date_label']}</td>
+          <td>{int(r['n_bets'])}</td>
+          <td>{hit_s}</td>
+          <td {_pnl_style(r['pnl'])}>{pnl_s} €</td>
+          <td {_pnl_style(r['roi'])}>{roi_s}</td>
+          <td {_pnl_style(r['cum_pnl'])}>{cum_s} €</td>
+        </tr>"""
+
+    pnl_class  = "pos" if total_pnl >= 0 else "neg"
+    roi_class  = "pos" if total_roi >= 0 else "neg"
+    wpnl_class = "pos" if win_pnl >= 0 else "neg"
+    dpnl_class = "pos" if duo_pnl >= 0 else "neg"
+
+    html = f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Performance — PMU Hippique</title>
+<style>
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+          font-size: 14px; background: #f4f5f7; color: #1a1a2e; padding: 24px 16px; }}
+  h1 {{ font-size: 22px; font-weight: 700; margin-bottom: 4px; }}
+  .subtitle {{ font-size: 13px; color: #666; margin-bottom: 20px; }}
+  .cards {{ display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }}
+  .card {{ background: #fff; border-radius: 8px; padding: 14px 20px;
+           box-shadow: 0 1px 3px rgba(0,0,0,.08); min-width: 120px; }}
+  .card .val {{ font-size: 22px; font-weight: 700; }}
+  .card .lbl {{ font-size: 11px; color: #888; margin-top: 2px; }}
+  .pos {{ color: #2e7d32; }}
+  .neg {{ color: #c62828; }}
+  .chart-wrap {{ background:#fff; border-radius:10px; padding:16px;
+                 box-shadow:0 1px 4px rgba(0,0,0,.1); margin-bottom:24px; }}
+  table {{ width: 100%; border-collapse: collapse; background: #fff;
+           border-radius: 10px; overflow: hidden;
+           box-shadow: 0 1px 4px rgba(0,0,0,.10); }}
+  th {{ background: #1a1a2e; color: #fff; padding: 10px 14px;
+        text-align: left; font-size: 12px; font-weight: 600; }}
+  td {{ padding: 9px 14px; border-top: 1px solid #eef0f4; font-size: 13px; }}
+  tr:hover td {{ background: #f8f9fb; }}
+  .section-title {{ font-size: 16px; font-weight: 700; margin: 24px 0 10px; }}
+  .breakdown {{ display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }}
+  .bk-card {{ background:#fff; border-radius:8px; padding:14px 20px;
+              box-shadow:0 1px 3px rgba(0,0,0,.08); flex:1; min-width:200px; }}
+  .bk-card h3 {{ font-size:13px; color:#666; margin-bottom:8px; }}
+  .bk-row {{ display:flex; justify-content:space-between; font-size:13px; margin-top:4px; }}
+  .footer {{ margin-top: 28px; font-size: 11px; color: #aaa; text-align: center; }}
+</style>
+</head>
+<body>
+<h1>Performance — Stratégie Hybride</h1>
+<p class="subtitle">WIN : Règles · DUO : LightGBM &nbsp;|&nbsp; Généré le {generated_at}</p>
+
+<div class="cards">
+  <div class="card"><div class="val">{total_bets}</div><div class="lbl">Paris résolus</div></div>
+  <div class="card"><div class="val">{total_won}/{total_bets}</div><div class="lbl">Gagnés</div></div>
+  <div class="card"><div class="val {pnl_class}">{total_pnl:+.1f} €</div><div class="lbl">P&amp;L total</div></div>
+  <div class="card"><div class="val {roi_class}">{total_roi:+.0%}</div><div class="lbl">ROI global</div></div>
+  <div class="card"><div class="val">{len(daily)}</div><div class="lbl">Jours actifs</div></div>
+</div>
+
+<div class="chart-wrap">{chart_html}</div>
+
+<div class="section-title">Par type de pari</div>
+<div class="breakdown">
+  <div class="bk-card">
+    <h3>WIN · Règles</h3>
+    <div class="bk-row"><span>Paris</span><strong>{len(win_stats)}</strong></div>
+    <div class="bk-row"><span>Hit rate</span><strong>{win_hit:.0%}</strong></div>
+    <div class="bk-row"><span>P&amp;L</span><strong class="{wpnl_class}">{win_pnl:+.1f} €</strong></div>
+    <div class="bk-row"><span>ROI</span><strong class="{'pos' if win_roi>=0 else 'neg'}">{win_roi:+.0%}</strong></div>
+  </div>
+  <div class="bk-card">
+    <h3>DUO · LightGBM</h3>
+    <div class="bk-row"><span>Paris</span><strong>{len(duo_stats)}</strong></div>
+    <div class="bk-row"><span>Hit rate</span><strong>{duo_hit:.0%}</strong></div>
+    <div class="bk-row"><span>P&amp;L</span><strong class="{dpnl_class}">{duo_pnl:+.1f} €</strong></div>
+    <div class="bk-row"><span>ROI</span><strong class="{'pos' if duo_roi>=0 else 'neg'}">{duo_roi:+.0%}</strong></div>
+  </div>
+</div>
+
+<div class="section-title">Détail par jour</div>
+<table>
+  <thead><tr>
+    <th>Date</th><th>Paris</th><th>Gagnés</th>
+    <th>P&amp;L</th><th>ROI</th><th>P&amp;L cumulé</th>
+  </tr></thead>
+  <tbody>{rows_html}</tbody>
+</table>
+
+<div class="footer">Système hippique PMU — paper trading uniquement</div>
+</body>
+</html>"""
 
     output_path.write_text(html, encoding="utf-8")
     return output_path

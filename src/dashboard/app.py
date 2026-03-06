@@ -50,6 +50,7 @@ st.set_page_config(
 
 # ── Collect available reports ─────────────────────────────────────────────────
 html_files = sorted(REPORTS_DIR.glob("bets_*.html"), reverse=True) if REPORTS_DIR.exists() else []
+perf_file  = REPORTS_DIR / "performance.html"
 
 
 def _label(p: Path) -> str:
@@ -80,12 +81,22 @@ with st.sidebar:
     st.divider()
     st.caption("Paper trading uniquement — Trot PMU")
 
-# ── Main — HTML viewer ────────────────────────────────────────────────────────
-if selected_path is None:
-    st.info(
-        "Aucune fiche HTML disponible dans `data/reports/`. "
-        "Le scheduler génère et pousse automatiquement les fiches chaque jour."
-    )
-else:
-    html_content = selected_path.read_text(encoding="utf-8")
-    components.html(html_content, height=900, scrolling=True)
+# ── Main — tabs ───────────────────────────────────────────────────────────────
+tab_bets, tab_perf = st.tabs(["📋 Paris du jour", "📈 Performance"])
+
+with tab_bets:
+    if selected_path is None:
+        st.info(
+            "Aucune fiche HTML disponible dans `data/reports/`. "
+            "Le scheduler génère et pousse automatiquement les fiches chaque jour."
+        )
+    else:
+        html_content = selected_path.read_text(encoding="utf-8")
+        components.html(html_content, height=900, scrolling=True)
+
+with tab_perf:
+    if not perf_file.exists():
+        st.info("Le rapport de performance sera généré après la première soirée de résolution.")
+    else:
+        perf_content = perf_file.read_text(encoding="utf-8")
+        components.html(perf_content, height=900, scrolling=True)

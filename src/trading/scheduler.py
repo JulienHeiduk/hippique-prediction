@@ -11,7 +11,7 @@ from src.scraper import get_connection, run_pipeline
 from src.features.pipeline import compute_features
 from src.model.lgbm import train_lgbm, save_lgbm_model, load_lgbm_model, score_lgbm
 from src.trading.engine import generate_bets, resolve_bets
-from src.trading.reporter import export_bets_html
+from src.trading.reporter import export_bets_html, export_performance_html
 
 
 def _git_push(path: Path) -> None:
@@ -43,6 +43,29 @@ def _git_push(path: Path) -> None:
         logger.warning("git push failed: {}", stderr or exc)
     except Exception as exc:
         logger.warning("git push error: {}", exc)
+
+
+def run_retrain_model() -> None:
+    """Retrain LightGBM on all resolved historical data and save to disk.
+
+    Scheduled at 08:00, 30 minutes before the morning session, so the
+    model is always fresh when bets are generated at 08:30.
+    """
+    logger.info("=== Model retraining starting ===")
+    conn = get_connection()
+    try:
+        hist_df = compute_features(conn)
+        if hist_df.empty:
+            logger.warning("No historical data — skipping model training")
+            return
+        model = train_lgbm(hist_df)
+        save_lgbm_model(model)
+        logger.info("=== Model retrained on {} races / {} runners ===",
+                    hist_df["race_id"].nunique(), len(hist_df))
+    except Exception as exc:
+        logger.error("Model retraining failed: {}", exc)
+    finally:
+        conn.close()
 
 
 def run_morning_session(date: str | None = None) -> None:
@@ -183,6 +206,10 @@ def run_evening_session(date: str | None = None) -> None:
         report_path = export_bets_html(conn, date)
         logger.info("Bet sheet updated → {}", report_path)
         _git_push(report_path)
+
+        perf_path = export_performance_html(conn)
+        logger.info("Performance report updated → {}", perf_path)
+        _git_push(perf_path)
     finally:
         conn.close()
 
@@ -198,6 +225,9 @@ def start_scheduler() -> None:
     from apscheduler.schedulers.blocking import BlockingScheduler
 
     scheduler = BlockingScheduler()
+
+    # Model retraining at 08:00 (30 min before morning session)
+    scheduler.add_job(run_retrain_model, "cron", hour=8, minute=0)
 
     # Morning: single run at 08:30 (odds not yet stable before that)
     scheduler.add_job(run_morning_session, "cron", hour=8, minute=30)
