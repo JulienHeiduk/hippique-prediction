@@ -53,7 +53,7 @@ with st.sidebar:
     st.caption("Paper trading uniquement — Trot PMU")
 
 # ── Main — tabs ───────────────────────────────────────────────────────────────
-tab_bets, tab_model = st.tabs(["📋 Paris du jour", "🤖 Modèle LightGBM"])
+tab_bets, tab_model = st.tabs(["📋 Paris du jour", "🤖 Évaluation des modèles"])
 
 with tab_bets:
     if selected_path is None:
