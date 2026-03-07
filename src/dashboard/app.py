@@ -21,11 +21,10 @@ MODEL_REPORT = REPORTS_DIR / "model_report.html"
 
 @st.cache_data(ttl=300)
 def _get_pnl_stats() -> dict | None:
-    """Query cumulative P&L, basic stats and daily series from resolved bets (read-only)."""
+    """Query total P&L and basic stats from resolved bets (read-only)."""
     if not DB_PATH.exists():
         return None
     try:
-        import pandas as pd
         conn = duckdb.connect(str(DB_PATH), read_only=True)
         row = conn.execute("""
             SELECT
@@ -36,27 +35,15 @@ def _get_pnl_stats() -> dict | None:
             FROM bets
             WHERE status IN ('won', 'lost')
         """).fetchone()
-        daily = conn.execute("""
-            SELECT date, SUM(pnl) AS pnl
-            FROM bets
-            WHERE status IN ('won', 'lost')
-            GROUP BY date
-            ORDER BY date
-        """).df()
         conn.close()
         if row is None or row[0] == 0:
             return None
         n_bets, n_won, total_pnl, total_stake = row
-        daily["date_label"] = daily["date"].apply(
-            lambda d: f"{str(d)[6:8]}/{str(d)[4:6]}"
-        )
-        daily["cum_pnl"] = daily["pnl"].cumsum()
         return {
             "n_bets": int(n_bets),
             "n_won": int(n_won),
             "total_pnl": float(total_pnl),
             "roi": float(total_pnl) / float(total_stake) if total_stake else 0.0,
-            "daily": daily,
         }
     except Exception:
         return None
@@ -96,21 +83,13 @@ with st.sidebar:
     st.divider()
     pnl_stats = _get_pnl_stats()
     if pnl_stats:
-        delta_color = "normal" if pnl_stats["total_pnl"] >= 0 else "inverse"
         st.metric(
             "P&L cumulé",
             f"{pnl_stats['total_pnl']:+.1f} €",
             delta=f"ROI {pnl_stats['roi']:+.0%}",
-            delta_color=delta_color,
+            delta_color="normal" if pnl_stats["total_pnl"] >= 0 else "inverse",
         )
         st.caption(f"{pnl_stats['n_won']}/{pnl_stats['n_bets']} paris gagnés")
-        daily = pnl_stats["daily"]
-        if len(daily) > 1:
-            import pandas as pd
-            chart_df = daily.set_index("date_label")[["cum_pnl"]].rename(
-                columns={"cum_pnl": "P&L cumulé (€)"}
-            )
-            st.line_chart(chart_df, height=160)
     st.divider()
     st.caption("Paper trading uniquement — Trot PMU")
 
