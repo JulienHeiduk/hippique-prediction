@@ -21,29 +21,42 @@ MODEL_REPORT = REPORTS_DIR / "model_report.html"
 
 @st.cache_data(ttl=300)
 def _get_pnl_stats() -> dict | None:
-    """Query cumulative P&L and basic stats from resolved bets (read-only)."""
+    """Query cumulative P&L, basic stats and daily series from resolved bets (read-only)."""
     if not DB_PATH.exists():
         return None
     try:
+        import pandas as pd
         conn = duckdb.connect(str(DB_PATH), read_only=True)
         row = conn.execute("""
             SELECT
-                COUNT(*)                          AS n_bets,
+                COUNT(*)                                       AS n_bets,
                 SUM(CASE WHEN status='won' THEN 1 ELSE 0 END) AS n_won,
-                SUM(pnl)                          AS total_pnl,
-                SUM(stake)                        AS total_stake
+                SUM(pnl)                                       AS total_pnl,
+                SUM(stake)                                     AS total_stake
             FROM bets
             WHERE status IN ('won', 'lost')
         """).fetchone()
+        daily = conn.execute("""
+            SELECT date, SUM(pnl) AS pnl
+            FROM bets
+            WHERE status IN ('won', 'lost')
+            GROUP BY date
+            ORDER BY date
+        """).df()
         conn.close()
         if row is None or row[0] == 0:
             return None
         n_bets, n_won, total_pnl, total_stake = row
+        daily["date_label"] = daily["date"].apply(
+            lambda d: f"{str(d)[6:8]}/{str(d)[4:6]}"
+        )
+        daily["cum_pnl"] = daily["pnl"].cumsum()
         return {
             "n_bets": int(n_bets),
             "n_won": int(n_won),
             "total_pnl": float(total_pnl),
             "roi": float(total_pnl) / float(total_stake) if total_stake else 0.0,
+            "daily": daily,
         }
     except Exception:
         return None
@@ -91,6 +104,13 @@ with st.sidebar:
             delta_color=delta_color,
         )
         st.caption(f"{pnl_stats['n_won']}/{pnl_stats['n_bets']} paris gagnés")
+        daily = pnl_stats["daily"]
+        if len(daily) > 1:
+            import pandas as pd
+            chart_df = daily.set_index("date_label")[["cum_pnl"]].rename(
+                columns={"cum_pnl": "P&L cumulé (€)"}
+            )
+            st.line_chart(chart_df, height=160)
     st.divider()
     st.caption("Paper trading uniquement — Trot PMU")
 
