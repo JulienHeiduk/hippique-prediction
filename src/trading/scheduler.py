@@ -164,7 +164,8 @@ def run_hourly_update(date: str | None = None) -> None:
 
     logger.info("=== Hourly update starting for {} ===", date)
 
-    pipeline_result = run_pipeline(date)
+    now = datetime.now()
+    pipeline_result = run_pipeline(date, min_race_time=now)
     logger.info(
         "Scraper: {} races, {} runners, {} errors",
         pipeline_result.races_fetched,
@@ -174,7 +175,6 @@ def run_hourly_update(date: str | None = None) -> None:
 
     conn = get_connection()
     try:
-        now = datetime.now()  # tz-naive local time — matches race_datetime from DuckDB
         lgbm_model = load_lgbm_model()
         lgbm_scorer = (lambda df, m=lgbm_model: score_lgbm(df, m)) if lgbm_model else None
 

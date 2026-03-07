@@ -35,6 +35,7 @@ class PipelineResult:
 def run(
     date: str | None = None,
     db_path: Path = DB_PATH,
+    min_race_time: datetime | None = None,
 ) -> PipelineResult:
     """Run the full scraping pipeline for *date* (YYYYMMDD). Defaults to today."""
     if date is None:
@@ -65,6 +66,14 @@ def run(
 
         # ---- Step 2: per-race participants fetch ----------------------------
         for race in trot_races:
+            # Skip races that have already started when a cutoff is provided
+            if min_race_time is not None and race.race_datetime is not None:
+                cutoff = min_race_time.replace(tzinfo=None)
+                race_dt = race.race_datetime.replace(tzinfo=None) if race.race_datetime.tzinfo else race.race_datetime
+                if race_dt <= cutoff:
+                    logger.debug("Hourly update: skipping past race {} ({})", race.race_id, race_dt)
+                    continue
+
             r_num = race.reunion_number
             c_num = race.course_number
             race_filename = f"R{r_num}_C{c_num}.json"
