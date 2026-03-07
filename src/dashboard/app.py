@@ -9,44 +9,34 @@ _ROOT = Path(__file__).parent.parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-import duckdb
+import re
+
 import streamlit as st
 import streamlit.components.v1 as components
 
-from config.settings import ROOT, DB_PATH
+from config.settings import ROOT
 
 REPORTS_DIR = ROOT / "data" / "reports"
 MODEL_REPORT = REPORTS_DIR / "model_report.html"
 
 
 @st.cache_data(ttl=300)
-def _get_pnl_stats() -> dict | None:
-    """Query total P&L and basic stats from resolved bets (read-only)."""
-    if not DB_PATH.exists():
-        return None
-    try:
-        conn = duckdb.connect(str(DB_PATH), read_only=True)
-        row = conn.execute("""
-            SELECT
-                COUNT(*)                                       AS n_bets,
-                SUM(CASE WHEN status='won' THEN 1 ELSE 0 END) AS n_won,
-                SUM(pnl)                                       AS total_pnl,
-                SUM(stake)                                     AS total_stake
-            FROM bets
-            WHERE status IN ('won', 'lost')
-        """).fetchone()
-        conn.close()
-        if row is None or row[0] == 0:
-            return None
-        n_bets, n_won, total_pnl, total_stake = row
-        return {
-            "n_bets": int(n_bets),
-            "n_won": int(n_won),
-            "total_pnl": float(total_pnl),
-            "roi": float(total_pnl) / float(total_stake) if total_stake else 0.0,
-        }
-    except Exception:
-        return None
+def _get_cumulative_pnl() -> float | None:
+    """Sum P&L across all resolved daily HTML reports."""
+    pat = re.compile(
+        r'<div class="val[^"]*">([+\-]?\d+\.?\d*)\s*€</div>\s*<div class="lbl">P&amp;L</div>'
+    )
+    total = 0.0
+    found = False
+    for f in REPORTS_DIR.glob("bets_*.html"):
+        try:
+            m = pat.search(f.read_text(encoding="utf-8"))
+            if m:
+                total += float(m.group(1))
+                found = True
+        except Exception:
+            pass
+    return total if found else None
 
 
 # ── Page config ───────────────────────────────────────────────────────────────
@@ -81,15 +71,13 @@ with st.sidebar:
         selected_path = options[selected_label]
 
     st.divider()
-    pnl_stats = _get_pnl_stats()
-    if pnl_stats:
+    pnl = _get_cumulative_pnl()
+    if pnl is not None:
         st.metric(
             "P&L cumulé",
-            f"{pnl_stats['total_pnl']:+.1f} €",
-            delta=f"ROI {pnl_stats['roi']:+.0%}",
-            delta_color="normal" if pnl_stats["total_pnl"] >= 0 else "inverse",
+            f"{pnl:+.1f} €",
+            delta_color="normal" if pnl >= 0 else "inverse",
         )
-        st.caption(f"{pnl_stats['n_won']}/{pnl_stats['n_bets']} paris gagnés")
     st.divider()
     st.caption("Paper trading uniquement — Trot PMU")
 
