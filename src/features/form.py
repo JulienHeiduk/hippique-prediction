@@ -51,6 +51,8 @@ def extended_form_features(musique: str | None, n: int = 5) -> dict:
         "form_trend": None,
         "best_position_last5": None,
         "n_valid_runs": float(n_valid),
+        "avg_position_last3": None,
+        "avg_position_last5": None,
     }
 
     if n_valid < 2:
@@ -61,8 +63,12 @@ def extended_form_features(musique: str | None, n: int = 5) -> dict:
     out["top3_rate_last5"]     = sum(1 for p in last_n if p <= 3) / len(last_n)
     out["best_position_last5"] = float(min(last_n))
 
+    last3 = valid[:3]
+    out["avg_position_last3"] = sum(last3) / len(last3)
+    last5 = valid[:5]
+    out["avg_position_last5"] = sum(last5) / len(last5)
+
     if n_valid >= 4:
-        last3 = valid[:3]
         prev3 = valid[3:6]
         if prev3:
             out["form_trend"] = sum(last3) / len(last3) - sum(prev3) / len(prev3)

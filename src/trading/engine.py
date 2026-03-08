@@ -60,12 +60,11 @@ def compute_today_features(
     if base_df.empty:
         return pd.DataFrame()
 
-    # --- 2. Morning odds, with final_odds as fallback ---
-    # dernierRapportReference ('morning') is the reference price published before
-    # races. For late-programme reunions it may not yet be available when the
-    # morning session runs; in that case we fall back to dernierRapportDirect
-    # ('final') so implied probabilities are computed from real market odds
-    # rather than 1/field_size.
+    # --- 2. Current odds: live (final) preferred, reference (morning) as fallback ---
+    # dernierRapportDirect ('final') = live market odds, always available when
+    # betting is open. dernierRapportReference ('morning') = reference price,
+    # often NULL at 08:30 for late-programme reunions. We use final_odds as
+    # primary so implied probabilities reflect the real current market.
     race_ids_in = base_df["race_id"].unique().tolist()
     placeholders = ", ".join(["?"] * len(race_ids_in))
     odds_sql = f"""
@@ -80,7 +79,10 @@ def compute_today_features(
     """
     odds_df = conn.execute(odds_sql, race_ids_in).df()
     # Effective morning_odds: prefer reference price; fall back to live odds
-    odds_df["morning_odds"] = odds_df["morning_odds_raw"].combine_first(odds_df["final_odds"])
+    # Prefer live odds (final, dernierRapportDirect) which are always available
+    # when betting is open; fall back to reference odds (morning) which are often
+    # NULL at 08:30 for late-programme races.
+    odds_df["morning_odds"] = odds_df["final_odds"].combine_first(odds_df["morning_odds_raw"])
     odds_df = odds_df.drop(columns=["morning_odds_raw"])
 
     # --- 3. Rolling jockey win rate (no leakage: strictly before race date) ---
@@ -89,7 +91,12 @@ def compute_today_features(
             ru.runner_id,
             COUNT(hr.race_id)                                                     AS jockey_starts_before,
             COALESCE(SUM(CASE WHEN hr.race_id IS NOT NULL
-                               AND h.finish_position = 1 THEN 1 ELSE 0 END), 0)  AS jockey_wins_before
+                               AND h.finish_position = 1 THEN 1 ELSE 0 END), 0)  AS jockey_wins_before,
+            COUNT(CASE WHEN hr.race_id IS NOT NULL
+                        AND hr.hippodrome = ra.hippodrome THEN 1 END)             AS jockey_starts_at_track,
+            COALESCE(SUM(CASE WHEN hr.race_id IS NOT NULL
+                               AND hr.hippodrome = ra.hippodrome
+                               AND h.finish_position = 1 THEN 1 ELSE 0 END), 0)  AS jockey_wins_at_track
         FROM runners ru
         JOIN races ra ON ra.race_id = ru.race_id
         LEFT JOIN runners h ON h.jockey_name = ru.jockey_name
@@ -105,6 +112,9 @@ def compute_today_features(
     jockey_df["jockey_win_rate"] = (
         jockey_df["jockey_wins_before"] / jockey_df["jockey_starts_before"]
     )
+    jockey_df["jockey_win_rate_at_track"] = (
+        jockey_df["jockey_wins_at_track"] / jockey_df["jockey_starts_at_track"]
+    )
 
     # --- 4. Rolling trainer win rate (no leakage) ---
     trainer_sql = f"""
@@ -112,7 +122,12 @@ def compute_today_features(
             ru.runner_id,
             COUNT(hr.race_id)                                                     AS trainer_starts_before,
             COALESCE(SUM(CASE WHEN hr.race_id IS NOT NULL
-                               AND h.finish_position = 1 THEN 1 ELSE 0 END), 0)  AS trainer_wins_before
+                               AND h.finish_position = 1 THEN 1 ELSE 0 END), 0)  AS trainer_wins_before,
+            COUNT(CASE WHEN hr.race_id IS NOT NULL
+                        AND hr.hippodrome = ra.hippodrome THEN 1 END)             AS trainer_starts_at_track,
+            COALESCE(SUM(CASE WHEN hr.race_id IS NOT NULL
+                               AND hr.hippodrome = ra.hippodrome
+                               AND h.finish_position = 1 THEN 1 ELSE 0 END), 0)  AS trainer_wins_at_track
         FROM runners ru
         JOIN races ra ON ra.race_id = ru.race_id
         LEFT JOIN runners h ON h.trainer_name = ru.trainer_name
@@ -128,6 +143,9 @@ def compute_today_features(
     trainer_df["trainer_win_rate"] = (
         trainer_df["trainer_wins_before"] / trainer_df["trainer_starts_before"]
     )
+    trainer_df["trainer_win_rate_at_track"] = (
+        trainer_df["trainer_wins_at_track"] / trainer_df["trainer_starts_at_track"]
+    )
 
     # --- 5. Horse-level stats from race history (no leakage) ---
     horse_sql = f"""
@@ -135,6 +153,7 @@ def compute_today_features(
             ru.runner_id,
             ra.date                                                                AS race_date,
             ra.hippodrome                                                          AS race_hippodrome,
+            ra.distance_metres                                                     AS race_distance,
             COUNT(hr.race_id)                                                      AS horse_n_runs,
             COALESCE(SUM(CASE WHEN hr.race_id IS NOT NULL
                                AND prev.finish_position = 1 THEN 1.0 ELSE 0.0 END), 0)
@@ -143,7 +162,27 @@ def compute_today_features(
             SUM(CASE WHEN hr.hippodrome = ra.hippodrome
                       AND prev.finish_position = 1 THEN 1.0 ELSE 0.0 END)
                 / NULLIF(SUM(CASE WHEN hr.hippodrome = ra.hippodrome
-                                  THEN 1.0 ELSE 0.0 END), 0)                     AS horse_win_rate_at_track
+                                  THEN 1.0 ELSE 0.0 END), 0)                     AS horse_win_rate_at_track,
+            -- F1: km_time history (lower = faster in trot)
+            AVG(CASE WHEN hr.race_id IS NOT NULL
+                      AND prev.km_time IS NOT NULL AND TRIM(prev.km_time) != ''
+                     THEN TRY_CAST(prev.km_time AS DOUBLE) END)                  AS avg_km_time_hist,
+            MIN(CASE WHEN hr.race_id IS NOT NULL
+                      AND prev.km_time IS NOT NULL AND TRIM(prev.km_time) != ''
+                     THEN TRY_CAST(prev.km_time AS DOUBLE) END)                  AS best_km_time_hist,
+            -- F3: distance performance (±500 m band)
+            COALESCE(SUM(CASE WHEN hr.race_id IS NOT NULL
+                               AND ABS(hr.distance_metres - ra.distance_metres) <= 500
+                               AND prev.finish_position = 1 THEN 1.0 ELSE 0.0 END), 0)
+                / NULLIF(SUM(CASE WHEN hr.race_id IS NOT NULL
+                                   AND ABS(hr.distance_metres - ra.distance_metres) <= 500
+                                  THEN 1.0 ELSE 0.0 END), 0)                    AS horse_win_rate_at_distance,
+            AVG(CASE WHEN hr.race_id IS NOT NULL
+                      AND ABS(hr.distance_metres - ra.distance_metres) <= 500
+                     THEN CAST(prev.finish_position AS DOUBLE) END)              AS horse_avg_position_at_distance,
+            -- F5: last win date
+            MAX(CASE WHEN hr.race_id IS NOT NULL
+                      AND prev.finish_position = 1 THEN hr.date END)             AS last_win_date
         FROM runners ru
         JOIN races ra ON ra.race_id = ru.race_id
         LEFT JOIN runners prev ON prev.horse_name = ru.horse_name
@@ -153,12 +192,38 @@ def compute_today_features(
                           AND hr.date < ra.date
         WHERE ru.race_id IN ({placeholders})
           AND ru.scratch = FALSE
-        GROUP BY ru.runner_id, ra.date, ra.hippodrome
+        GROUP BY ru.runner_id, ra.date, ra.hippodrome, ra.distance_metres
     """
     horse_df = conn.execute(horse_sql, race_ids_in).df()
     horse_df["days_since_last_race"] = horse_df.apply(
         lambda r: _days_diff(r["race_date"], r["last_race_date"]), axis=1
     )
+    horse_df["days_since_last_win"] = horse_df.apply(
+        lambda r: _days_diff(r["race_date"], r["last_win_date"]), axis=1
+    )
+
+    # --- 5b. Horse–jockey pair stats (F6) ---
+    horse_jockey_sql = f"""
+        SELECT
+            ru.runner_id,
+            COUNT(hr.race_id)                                                      AS hj_starts,
+            COALESCE(SUM(CASE WHEN hr.race_id IS NOT NULL
+                               AND prev.finish_position = 1 THEN 1.0 ELSE 0.0 END), 0)
+                / NULLIF(COUNT(hr.race_id), 0)                                    AS horse_jockey_win_rate
+        FROM runners ru
+        JOIN races ra ON ra.race_id = ru.race_id
+        LEFT JOIN runners prev ON prev.horse_name  = ru.horse_name
+                              AND prev.jockey_name = ru.jockey_name
+                              AND prev.scratch = FALSE
+                              AND prev.finish_position IS NOT NULL
+        LEFT JOIN races hr ON hr.race_id = prev.race_id
+                          AND hr.date < ra.date
+        WHERE ru.race_id IN ({placeholders})
+          AND ru.scratch = FALSE
+        GROUP BY ru.runner_id
+    """
+    hj_df = conn.execute(horse_jockey_sql, race_ids_in).df()
+    hj_df = hj_df.rename(columns={"hj_starts": "horse_jockey_n_races"})
 
     # --- 6. Extended form features + form_score from musique ---
     base_df["form_score"] = base_df["musique"].apply(form_score)
@@ -177,13 +242,28 @@ def compute_today_features(
     df = odds_features(df)
 
     # --- 9. Merge jockey + trainer stats ---
-    df = df.merge(jockey_df[["runner_id", "jockey_win_rate"]], on="runner_id", how="left")
-    df = df.merge(trainer_df[["runner_id", "trainer_win_rate"]], on="runner_id", how="left")
+    df = df.merge(
+        jockey_df[["runner_id", "jockey_win_rate", "jockey_win_rate_at_track"]],
+        on="runner_id", how="left",
+    )
+    df = df.merge(
+        trainer_df[["runner_id", "trainer_win_rate", "trainer_win_rate_at_track"]],
+        on="runner_id", how="left",
+    )
 
     # --- 10. Merge horse stats ---
     df = df.merge(
         horse_df[["runner_id", "horse_n_runs", "horse_win_rate",
-                  "horse_win_rate_at_track", "days_since_last_race"]],
+                  "horse_win_rate_at_track", "days_since_last_race",
+                  "avg_km_time_hist", "best_km_time_hist",
+                  "horse_win_rate_at_distance", "horse_avg_position_at_distance",
+                  "days_since_last_win"]],
+        on="runner_id", how="left",
+    )
+
+    # --- 10b. Merge horse–jockey pair stats ---
+    df = df.merge(
+        hj_df[["runner_id", "horse_jockey_win_rate", "horse_jockey_n_races"]],
         on="runner_id", how="left",
     )
 
@@ -198,10 +278,15 @@ def compute_today_features(
         "form_score",
         "win_rate_last5", "top3_rate_last5", "form_trend",
         "best_position_last5", "n_valid_runs",
+        "avg_position_last3", "avg_position_last5",
         "draw_position", "handicap_distance", "deferre", "race_hour",
-        "jockey_win_rate", "trainer_win_rate",
+        "jockey_win_rate", "jockey_win_rate_at_track",
+        "trainer_win_rate", "trainer_win_rate_at_track",
         "horse_n_runs", "horse_win_rate", "horse_win_rate_at_track",
-        "days_since_last_race",
+        "days_since_last_race", "days_since_last_win",
+        "avg_km_time_hist", "best_km_time_hist",
+        "horse_win_rate_at_distance", "horse_avg_position_at_distance",
+        "horse_jockey_win_rate", "horse_jockey_n_races",
         "finish_position",
     ]
     available = [c for c in keep if c in df.columns]
@@ -457,11 +542,13 @@ def resolve_bets(
     pos_map   = dict(zip(runners_df["runner_id"], runners_df["finish_position"]))
     field_map = dict(zip(runners_df["runner_id"], runners_df["field_size"]))
 
-    # Final odds fallback: used when morning_odds is NULL (e.g. R7 late races)
+    # Actual final odds (dernierRapportDirect) = real dividend used for P&L.
+    # Take the latest snapshot per runner in case multiple were stored.
     final_odds_sql = f"""
         SELECT runner_id, decimal_odds
         FROM odds
         WHERE runner_id IN ({placeholders}) AND odds_type = 'final'
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY runner_id ORDER BY snapshot_time DESC) = 1
     """
     final_odds_df = conn.execute(final_odds_sql, all_runner_ids).df()
     final_odds_map = dict(zip(final_odds_df["runner_id"], final_odds_df["decimal_odds"]))
@@ -511,9 +598,11 @@ def resolve_bets(
         elif bet_type == "win":
             stake = UNIT_STAKE
             hit = int(pos1) == 1
-            # Fall back to final_odds when morning_odds was not available at scrape time
-            odds = morning_odds if (morning_odds is not None and not pd.isna(morning_odds)) \
-                else final_odds_map.get(runner_id_1)
+            # Use the actual final dividend (dernierRapportDirect); fall back to
+            # the reference morning odds only if no final odds are available.
+            odds = final_odds_map.get(runner_id_1) or (
+                morning_odds if (morning_odds is not None and not pd.isna(morning_odds)) else None
+            )
             if hit and odds is not None:
                 pnl = (float(odds) - 1.0) * stake
             else:
@@ -524,8 +613,9 @@ def resolve_bets(
             stake = UNIT_STAKE
             cutoff = 2 if field_size < 5 else 3
             hit = int(pos1) <= cutoff
-            odds = morning_odds if (morning_odds is not None and not pd.isna(morning_odds)) \
-                else final_odds_map.get(runner_id_1)
+            odds = final_odds_map.get(runner_id_1) or (
+                morning_odds if (morning_odds is not None and not pd.isna(morning_odds)) else None
+            )
             if hit and odds is not None:
                 pnl = (float(odds) / 4.0 - 1.0) * stake
             else:
@@ -556,9 +646,10 @@ def resolve_bets(
             logger.warning("Unknown bet_type {} for bet {}", bet_type, bet_id)
             continue
 
-        # Resolve the effective odds used for P&L (morning_odds or final_odds fallback)
-        effective_odds = morning_odds if (morning_odds is not None and not pd.isna(morning_odds)) \
-            else final_odds_map.get(runner_id_1)
+        # Effective odds stored on the resolved bet = actual final dividend if available
+        effective_odds = final_odds_map.get(runner_id_1) or (
+            morning_odds if (morning_odds is not None and not pd.isna(morning_odds)) else None
+        )
 
         # Update bet in DB (INSERT OR REPLACE = upsert)
         updated_bet = {
