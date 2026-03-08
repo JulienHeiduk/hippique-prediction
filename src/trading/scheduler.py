@@ -232,6 +232,10 @@ def run_evening_session(date: str | None = None) -> None:
         report_path = export_bets_html(conn, date)
         logger.info("Bet sheet updated → {}", report_path)
         _git_push(report_path)
+
+        model_report_path = export_model_report_html(conn)
+        logger.info("Model report updated → {}", model_report_path)
+        _git_push(model_report_path)
     finally:
         conn.close()
 
