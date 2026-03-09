@@ -7,7 +7,36 @@ from typing import TYPE_CHECKING
 import pandas as pd
 from loguru import logger
 
-from config.settings import LGBM_MODEL_PATH, LGBM_DUO_MODEL_PATH
+from config.settings import LGBM_MODEL_PATH, LGBM_DUO_MODEL_PATH, MODEL_DIR
+
+# Optuna-tuned hyperparameters (written by scripts/tune_lgbm_hyperparams.py)
+_LGBM_PARAMS_PATH = MODEL_DIR / "lgbm_params.json"
+
+# Fixed fallback hyperparameters (used when no tuned params file exists)
+_DEFAULT_PARAMS: dict = {
+    "n_estimators": 300,
+    "num_leaves": 31,
+    "learning_rate": 0.05,
+    "min_child_samples": 10,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+}
+
+
+def _load_lgbm_params() -> dict:
+    """Return tuned params from disk if available, else fallback defaults."""
+    import json
+    if _LGBM_PARAMS_PATH.exists():
+        with open(_LGBM_PARAMS_PATH) as f:
+            stored = json.load(f)
+        # Strip metadata keys, keep only LightGBM params
+        lgbm_keys = {"n_estimators", "num_leaves", "learning_rate",
+                     "min_child_samples", "subsample", "colsample_bytree",
+                     "reg_alpha", "reg_lambda"}
+        params = {k: v for k, v in stored.items() if k in lgbm_keys}
+        logger.debug("Loaded tuned LGBM params from {}", _LGBM_PARAMS_PATH)
+        return params
+    return _DEFAULT_PARAMS.copy()
 
 if TYPE_CHECKING:
     from src.model.backtest import BacktestReport
@@ -83,18 +112,14 @@ def train_lgbm(df: pd.DataFrame):
     # Group sizes (runners per race, in sorted race_id order)
     groups = df.groupby("race_id", sort=True).size().values
 
+    params = _load_lgbm_params()
     model = lgb.LGBMRanker(
         objective="lambdarank",
         metric="ndcg",
         ndcg_eval_at=[1, 3],
-        n_estimators=300,
-        num_leaves=31,
-        learning_rate=0.05,
-        min_child_samples=10,
-        subsample=0.8,
-        colsample_bytree=0.8,
         random_state=42,
         verbose=-1,
+        **params,
     )
     model.fit(X, y, group=groups)
 
