@@ -163,6 +163,7 @@ def backtest_lgbm_walkforward(
     min_train_days: int = 30,
     bet_type: str = "win",
     ev_filter: bool = False,
+    ev_threshold: float = 1.0,
 ) -> "BacktestReport":
     """Walk-forward backtest for LightGBM — no data leakage.
 
@@ -214,6 +215,7 @@ def backtest_lgbm_walkforward(
             model_name="lgbm",
             bet_type=bet_type,
             ev_filter=ev_filter,
+            ev_threshold=ev_threshold,
         )
         full_report.bets.extend(day_report.bets)
 

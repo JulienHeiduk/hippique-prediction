@@ -20,18 +20,23 @@ With 6 months:
 
 ---
 
-## 2. EV Threshold Tuning ⭐
+## 2. EV Threshold Tuning ✅ Done
 
-**Status:** quick win — 10-line grid search
+**Status:** implemented — `WIN_EV_THRESHOLD = 1.5` in `config/settings.py`
 
-Already observed today:
+Walk-forward grid search results (181 days, rules scorer for WIN):
 
-| EV threshold | LightGBM WIN ROI | Bets |
+| EV threshold | WIN ROI | Bets |
 |---|---|---|
-| 1.0 (current) | 63.4% | 958 |
-| auto (ev_filter=True) | 112.3% | 356 |
+| 1.0 (was default) | 111.7% | 3110 |
+| 1.1 | 111.4% | 3006 |
+| 1.2 | 112.8% | 2905 |
+| **1.5 (new)** | **117.0%** | **2621** |
+| 2.0 | 120.8% | 2122 |
 
-A grid search over `[1.0, 1.1, 1.2, 1.5, 2.0]` on the walk-forward data would find the optimal precision/volume trade-off for both WIN and DUO. The threshold can be set per bet type.
+**Decision:** `WIN_EV_THRESHOLD = 1.5` — best ROI/volume trade-off (+5.3% ROI, -16% bets vs 1.0).
+
+**DUO:** EV filter in backtest uses wrong formula (top-1 only instead of combined_model_prob). Production code already uses `combined_model_prob > combined_implied_prob * threshold` — kept at 1.0.
 
 ---
 
@@ -146,7 +151,7 @@ These are derivable from `parse_musique()` with no new data.
 | Idea | Impact | Effort | When |
 |---|---|---|---|
 | More historical data (6 months) | ⭐⭐⭐ | Low | Now |
-| EV threshold tuning | ⭐⭐ | Low | Now |
+| EV threshold tuning | ⭐⭐ | Low | ✅ Done (WIN=1.5) |
 | LightGBM hyperparameter tuning | ⭐⭐ | Medium | After more data |
 | DUO-specific model | ⭐⭐ | Medium | Now |
 | Probability calibration | ⭐ | Medium | After more data |
