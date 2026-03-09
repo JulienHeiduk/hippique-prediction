@@ -8,7 +8,8 @@ DB_PATH = ROOT / "data" / "processed" / "hippique.duckdb"
 RAW_DIR = ROOT / "data" / "raw"
 LOG_DIR = ROOT / "logs"
 MODEL_DIR = ROOT / "data" / "models"
-LGBM_MODEL_PATH = MODEL_DIR / "lgbm_ranker.txt"
+LGBM_MODEL_PATH = MODEL_DIR / "lgbm_ranker.txt"       # WIN model (label: 2=1st, 1=top3, 0=rest)
+LGBM_DUO_MODEL_PATH = MODEL_DIR / "lgbm_duo_ranker.txt"  # DUO model (label: 2=top2, 0=rest)
 
 # PMU API  (date format in URLs: DDMMYYYY)
 PMU_BASE = "https://offline.turfinfo.api.pmu.fr/rest/client/7"

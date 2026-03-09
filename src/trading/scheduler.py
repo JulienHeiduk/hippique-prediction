@@ -129,7 +129,7 @@ def run_morning_session(date: str | None = None) -> None:
         # WIN bets: rule-based scorer (best ROI on win bets in backtest)
         bets_win = generate_bets(conn, date, bet_types=["win"], ev_threshold=WIN_EV_THRESHOLD)
 
-        # DUO bets: LightGBM scorer (best ROI on duo bets in backtest)
+        # DUO bets: LightGBM WIN model (richer label, 119.6% ROI > DUO label 113.0%)
         bets_duo = []
         if lgbm_model is not None:
             lgbm_scorer = lambda df, m=lgbm_model: score_lgbm(df, m)

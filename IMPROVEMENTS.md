@@ -56,19 +56,20 @@ A simple 3-fold time-series CV inside `train_lgbm()` could find better params au
 
 ---
 
-## 4. DUO-Specific Model
+## 4. DUO-Specific Model ✅ Tested — not beneficial
 
-**Status:** medium effort — modify training label
+**Status:** implemented and evaluated; reverted to WIN model for DUO
 
-The current LightGBM is trained with WIN-focused relevance (2=1st, 1=top3, 0=rest), but DUO needs the **pair** (1st + 2nd) correct.
+Walk-forward benchmark (181 days, `bet_type=duo`):
 
-Option A — Change label for DUO training: `2 = 1st or 2nd, 0 = rest`
+| Model | Label | DUO ROI | Hit | Bets |
+|---|---|---|---|---|
+| WIN model (current) | 2=1st, 1=top3, 0=rest | **119.6%** | 21.4% | 3361 |
+| DUO model (new) | 2=top2, 0=rest | 113.0% | 21.3% | 3361 |
 
-Option B — Train two separate models:
-- `lgbm_win.txt` optimised for WIN (current)
-- `lgbm_duo.txt` optimised for DUO (new label)
+**Conclusion:** the DUO-specific label (`2=top2, 0=rest`) is too sparse — only 2 positive grades vs 3 in the WIN label. The WIN model's richer gradient signal learns a stronger ranking that happens to work well for DUO bets.
 
-This would likely recover the DUO ROI drop seen when adding new features.
+`train_lgbm_duo()` is preserved in `src/model/lgbm.py` as a utility but is not used in production. Revisit with >6 months of data.
 
 ---
 
@@ -153,7 +154,7 @@ These are derivable from `parse_musique()` with no new data.
 | More historical data (6 months) | ⭐⭐⭐ | Low | Now |
 | EV threshold tuning | ⭐⭐ | Low | ✅ Done (WIN=1.5) |
 | LightGBM hyperparameter tuning | ⭐⭐ | Medium | After more data |
-| DUO-specific model | ⭐⭐ | Medium | Now |
+| DUO-specific model | ⭐⭐ | Medium | ✅ Tested — WIN label wins |
 | Probability calibration | ⭐ | Medium | After more data |
 | CatBoost with categoricals | ⭐⭐ | Medium | After more data |
 | Race-level filtering | ⭐ | Low | Now |

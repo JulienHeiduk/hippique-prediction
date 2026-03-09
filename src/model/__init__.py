@@ -9,6 +9,7 @@ from src.model.scorer import (
 )
 from src.model.lgbm import (
     train_lgbm, score_lgbm, save_lgbm_model, load_lgbm_model,
+    train_lgbm_duo, save_lgbm_duo_model, load_lgbm_duo_model,
     backtest_lgbm_walkforward,
 )
 
@@ -25,5 +26,8 @@ __all__ = [
     "score_lgbm",
     "save_lgbm_model",
     "load_lgbm_model",
+    "train_lgbm_duo",
+    "save_lgbm_duo_model",
+    "load_lgbm_duo_model",
     "backtest_lgbm_walkforward",
 ]
