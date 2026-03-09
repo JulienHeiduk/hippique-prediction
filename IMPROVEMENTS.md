@@ -40,19 +40,28 @@ Walk-forward grid search results (181 days, rules scorer for WIN):
 
 ---
 
-## 3. LightGBM Hyperparameter Tuning
+## 3. LightGBM Hyperparameter Tuning ✅ Done
 
-**Status:** medium effort — use Optuna or manual grid search inside walk-forward
+**Status:** implemented — Optuna, 60 trials, 3-fold time-series CV, GPU (OpenCL)
 
-Current fixed params: `n_estimators=300, num_leaves=31, learning_rate=0.05, min_child_samples=10`.
+Results (DUO walk-forward, 181 days):
 
-Key params to tune:
-- `min_child_samples` — controls overfitting on small training folds
-- `num_leaves` — model complexity (try 15, 31, 63)
-- `learning_rate` + `n_estimators` jointly (try 0.02/500, 0.05/300, 0.1/150)
-- `subsample` / `colsample_bytree` — regularisation
+| Config | DUO ROI | Hit | P&L |
+|---|---|---|---|
+| Fixed params (n_est=300, lr=0.05) | 119.6% | 21.4% | 8036u |
+| **Tuned params** | **141.3%** | **22.9%** | **9496u** |
 
-A simple 3-fold time-series CV inside `train_lgbm()` could find better params automatically.
+Best params found (`data/models/lgbm_params.json`):
+
+| Param | Before | After | Effect |
+|---|---|---|---|
+| `n_estimators` | 300 | 104 | Fewer trees → less overfitting |
+| `learning_rate` | 0.05 | 0.013 | Slower, more conservative |
+| `min_child_samples` | 10 | 48 | Stronger leaf regularisation |
+| `reg_alpha` | 0.0 | 0.14 | L1 added |
+| `reg_lambda` | 0.0 | 1.94 | L2 added |
+
+The model was overfitting with 300 estimators. `train_lgbm()` auto-loads params from `lgbm_params.json` when present. Re-run `scripts/tune_lgbm_hyperparams.py` after more data.
 
 ---
 
@@ -153,7 +162,7 @@ These are derivable from `parse_musique()` with no new data.
 |---|---|---|---|
 | More historical data (6 months) | ⭐⭐⭐ | Low | Now |
 | EV threshold tuning | ⭐⭐ | Low | ✅ Done (WIN=1.5) |
-| LightGBM hyperparameter tuning | ⭐⭐ | Medium | After more data |
+| LightGBM hyperparameter tuning | ⭐⭐ | Medium | ✅ Done (+21.7% DUO ROI) |
 | DUO-specific model | ⭐⭐ | Medium | ✅ Tested — WIN label wins |
 | Probability calibration | ⭐ | Medium | After more data |
 | CatBoost with categoricals | ⭐⭐ | Medium | After more data |
