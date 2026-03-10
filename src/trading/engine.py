@@ -78,11 +78,12 @@ def compute_today_features(
         GROUP BY runner_id, race_id
     """
     odds_df = conn.execute(odds_sql, race_ids_in).df()
-    # Effective morning_odds: prefer reference price; fall back to live odds
-    # Prefer live odds (final, dernierRapportDirect) which are always available
-    # when betting is open; fall back to reference odds (morning) which are often
-    # NULL at 08:30 for late-programme races.
-    odds_df["morning_odds"] = odds_df["final_odds"].combine_first(odds_df["morning_odds_raw"])
+    # morning_odds = reference price (dernierRapportReference), same as in the
+    # historical feature pipeline used during backtest/training.  Fall back to
+    # live odds only when the reference is not yet published (e.g. late-programme
+    # races at 08:30).  This preserves the odds_drift_pct signal in the hourly
+    # updates: drift = (final_live - morning_reference) / morning_reference.
+    odds_df["morning_odds"] = odds_df["morning_odds_raw"].combine_first(odds_df["final_odds"])
     odds_df = odds_df.drop(columns=["morning_odds_raw"])
 
     # --- 3. Rolling jockey win rate (no leakage: strictly before race date) ---

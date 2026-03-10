@@ -1,14 +1,45 @@
 """APScheduler-based daily pipeline: morning scrape + bet generation, evening resolution."""
 from __future__ import annotations
 
+import os
 import subprocess
 from datetime import datetime
 from pathlib import Path
 
 from loguru import logger
 
+_LOCK_FILE = Path(__file__).resolve().parents[2] / "scheduler.lock"
+
+
+def _acquire_scheduler_lock() -> bool:
+    """Write a PID lock file. Returns False if another instance is already running."""
+    if _LOCK_FILE.exists():
+        try:
+            pid = int(_LOCK_FILE.read_text().strip())
+            # On Windows, check if PID is alive by sending signal 0
+            os.kill(pid, 0)
+            logger.error(
+                "Scheduler already running (PID {}). Remove {} to force-start.",
+                pid, _LOCK_FILE,
+            )
+            return False
+        except (ProcessLookupError, PermissionError):
+            # PID no longer exists — stale lock file, overwrite it
+            pass
+        except (ValueError, OSError):
+            pass
+    _LOCK_FILE.write_text(str(os.getpid()))
+    return True
+
+
+def _release_scheduler_lock() -> None:
+    try:
+        _LOCK_FILE.unlink(missing_ok=True)
+    except OSError:
+        pass
+
 from config.settings import WIN_EV_THRESHOLD, DUO_EV_THRESHOLD
-from src.scraper import get_connection, run_pipeline
+from src.scraper import close_connection, get_connection, run_pipeline
 from src.features.pipeline import compute_features
 from src.model.lgbm import train_lgbm, save_lgbm_model, load_lgbm_model, score_lgbm
 from src.model.scorer import optimize_weights, save_rule_weights
@@ -66,7 +97,7 @@ def run_retrain_rules() -> None:
     except Exception as exc:
         logger.error("Rule weight optimisation failed: {}", exc)
     finally:
-        conn.close()
+        close_connection()
 
 
 def run_retrain_model() -> None:
@@ -92,7 +123,7 @@ def run_retrain_model() -> None:
     except Exception as exc:
         logger.error("Model retraining failed: {}", exc)
     finally:
-        conn.close()
+        close_connection()
 
 
 def run_morning_session(date: str | None = None) -> None:
@@ -147,7 +178,7 @@ def run_morning_session(date: str | None = None) -> None:
         logger.info("Bet sheet saved → {}", report_path)
         _git_push(report_path)
     finally:
-        conn.close()
+        close_connection()
 
 
 def run_hourly_update(date: str | None = None) -> None:
@@ -197,7 +228,7 @@ def run_hourly_update(date: str | None = None) -> None:
         logger.info("Bet sheet updated → {}", report_path)
         _git_push(report_path)
     finally:
-        conn.close()
+        close_connection()
 
 
 def run_evening_session(date: str | None = None) -> None:
@@ -239,7 +270,7 @@ def run_evening_session(date: str | None = None) -> None:
         logger.info("Model report updated → {}", model_report_path)
         _git_push(model_report_path)
     finally:
-        conn.close()
+        close_connection()
 
 
 def start_scheduler() -> None:
@@ -250,6 +281,9 @@ def start_scheduler() -> None:
       10:00–22:00  — hourly odds refresh + bet regen         → GitHub push
       22:30        — evening scrape (results + P&L)          → GitHub push
     """
+    if not _acquire_scheduler_lock():
+        return
+
     from apscheduler.schedulers.blocking import BlockingScheduler
 
     scheduler = BlockingScheduler()
@@ -272,4 +306,7 @@ def start_scheduler() -> None:
     logger.info(
         "Scheduler starting — 08:30 morning / 10:00–22:00 hourly / 22:30 evening"
     )
-    scheduler.start()
+    try:
+        scheduler.start()
+    finally:
+        _release_scheduler_lock()

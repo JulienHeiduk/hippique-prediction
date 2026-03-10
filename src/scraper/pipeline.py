@@ -17,6 +17,7 @@ from src.scraper.parser import (
 )
 from src.scraper.saver import save_raw
 from src.scraper.storage import (
+    close_connection,
     get_connection,
     upsert_odds,
     upsert_race,
@@ -45,61 +46,60 @@ def run(
     conn = get_connection(db_path)
     snapshot_time = datetime.now(tz=timezone.utc)
 
-    with PMUClient() as client:
-        # ---- Step 1: fetch programme (contains race metadata + course list) ---
-        try:
-            raw_programme = client.fetch_reunions(date)
-        except PipelineError as exc:
-            msg = f"Failed to fetch programme for {date}: {exc}"
-            logger.error(msg)
-            result.errors.append(msg)
-            conn.close()
-            return result
+    try:
+        with PMUClient() as client:
+            # ---- Step 1: fetch programme (contains race metadata + course list) ---
+            try:
+                raw_programme = client.fetch_reunions(date)
+            except PipelineError as exc:
+                msg = f"Failed to fetch programme for {date}: {exc}"
+                logger.error(msg)
+                result.errors.append(msg)
+                return result
 
-        save_raw(raw_programme, date, "reunions.json")
-        trot_races = parse_reunions(raw_programme, date)
+            save_raw(raw_programme, date, "reunions.json")
+            trot_races = parse_reunions(raw_programme, date)
 
-        if not trot_races:
-            logger.info("No trot races found for {}.", date)
-            conn.close()
-            return result
+            if not trot_races:
+                logger.info("No trot races found for {}.", date)
+                return result
 
-        # ---- Step 2: per-race participants fetch ----------------------------
-        for race in trot_races:
-            # Skip races that have already started when a cutoff is provided
-            if min_race_time is not None and race.race_datetime is not None:
-                cutoff = min_race_time.replace(tzinfo=None)
-                race_dt = race.race_datetime.replace(tzinfo=None) if race.race_datetime.tzinfo else race.race_datetime
-                if race_dt <= cutoff:
-                    logger.debug("Hourly update: skipping past race {} ({})", race.race_id, race_dt)
+            # ---- Step 2: per-race participants fetch ----------------------------
+            for race in trot_races:
+                # Skip races that have already started when a cutoff is provided
+                if min_race_time is not None and race.race_datetime is not None:
+                    cutoff = min_race_time.replace(tzinfo=None)
+                    race_dt = race.race_datetime.replace(tzinfo=None) if race.race_datetime.tzinfo else race.race_datetime
+                    if race_dt <= cutoff:
+                        logger.debug("Hourly update: skipping past race {} ({})", race.race_id, race_dt)
+                        continue
+
+                r_num = race.reunion_number
+                c_num = race.course_number
+                race_filename = f"R{r_num}_C{c_num}.json"
+
+                try:
+                    raw_participants = client.fetch_race(date, r_num, c_num)
+                except PipelineError as exc:
+                    msg = f"Failed to fetch participants R{r_num}/C{c_num} for {date}: {exc}"
+                    logger.warning(msg)
+                    result.errors.append(msg)
                     continue
 
-            r_num = race.reunion_number
-            c_num = race.course_number
-            race_filename = f"R{r_num}_C{c_num}.json"
+                raw_path = save_raw(raw_participants, date, race_filename)
+                race.raw_file_path = str(raw_path)
 
-            try:
-                raw_participants = client.fetch_race(date, r_num, c_num)
-            except PipelineError as exc:
-                msg = f"Failed to fetch participants R{r_num}/C{c_num} for {date}: {exc}"
-                logger.warning(msg)
-                result.errors.append(msg)
-                continue
+                runners = parse_runners(raw_participants, race.race_id)
+                odds_list = parse_odds(raw_participants, race.race_id, snapshot_time)
 
-            raw_path = save_raw(raw_participants, date, race_filename)
-            race.raw_file_path = str(raw_path)
+                upsert_race(conn, race.__dict__)
+                upsert_runners(conn, [r.__dict__ for r in runners])
+                upsert_odds(conn, [o.__dict__ for o in odds_list])
 
-            runners = parse_runners(raw_participants, race.race_id)
-            odds_list = parse_odds(raw_participants, race.race_id, snapshot_time)
-
-            upsert_race(conn, race.__dict__)
-            upsert_runners(conn, [r.__dict__ for r in runners])
-            upsert_odds(conn, [o.__dict__ for o in odds_list])
-
-            result.races_fetched += 1
-            result.runners_fetched += len(runners)
-
-    conn.close()
+                result.races_fetched += 1
+                result.runners_fetched += len(runners)
+    finally:
+        close_connection()
     logger.info(
         "Pipeline complete for {}: {} races, {} runners, {} errors",
         date,

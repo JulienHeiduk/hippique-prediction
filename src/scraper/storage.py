@@ -8,12 +8,41 @@ from loguru import logger
 
 from config.settings import DB_PATH
 
+# Process-level singleton — one open connection per process at a time.
+_singleton: duckdb.DuckDBPyConnection | None = None
+_singleton_path: Path | None = None
+
 
 def get_connection(db_path: Path = DB_PATH) -> duckdb.DuckDBPyConnection:
+    """Return the process-level singleton DuckDB connection, creating it if needed."""
+    global _singleton, _singleton_path
     db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if _singleton is not None and _singleton_path == db_path:
+        try:
+            _singleton.execute("SELECT 1")
+            return _singleton
+        except Exception:
+            # Connection is dead — fall through and reopen
+            _singleton = None
+
     conn = duckdb.connect(str(db_path))
     init_schema(conn)
-    return conn
+    _singleton = conn
+    _singleton_path = db_path
+    return _singleton
+
+
+def close_connection() -> None:
+    """Close the singleton connection and reset it."""
+    global _singleton, _singleton_path
+    if _singleton is not None:
+        try:
+            _singleton.close()
+        except Exception:
+            pass
+    _singleton = None
+    _singleton_path = None
 
 
 def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
