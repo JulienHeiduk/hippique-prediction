@@ -1,3 +1,6 @@
+# Runtime artifacts
+scheduler.lock
+
 # Python
 __pycache__/
 *.py[cod]
