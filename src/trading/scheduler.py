@@ -137,6 +137,7 @@ def run_morning_session(date: str | None = None) -> None:
 
     logger.info("=== Morning session starting for {} ===", date)
 
+    now = datetime.now()
     pipeline_result = run_pipeline(date)
     logger.info(
         "Scraper: {} races, {} runners, {} errors",
@@ -158,7 +159,8 @@ def run_morning_session(date: str | None = None) -> None:
                 logger.warning("LightGBM training failed: {} — skipping", exc)
 
         # WIN bets: rule-based scorer (best ROI on win bets in backtest)
-        bets_win = generate_bets(conn, date, bet_types=["win"], ev_threshold=WIN_EV_THRESHOLD)
+        bets_win = generate_bets(conn, date, bet_types=["win"], min_race_time=now,
+                                  ev_threshold=WIN_EV_THRESHOLD)
 
         # DUO bets: LightGBM WIN model (richer label, 119.6% ROI > DUO label 113.0%)
         bets_duo = []
@@ -167,7 +169,7 @@ def run_morning_session(date: str | None = None) -> None:
             bets_duo = generate_bets(
                 conn, date,
                 scorer_fn=lgbm_scorer, model_source="lgbm",
-                bet_types=["duo"], ev_threshold=DUO_EV_THRESHOLD,
+                bet_types=["duo"], min_race_time=now, ev_threshold=DUO_EV_THRESHOLD,
             )
 
         logger.info(
