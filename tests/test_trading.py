@@ -1,4 +1,4 @@
-"""Unit tests for src/trading/kelly.py and src/trading/engine.py."""
+"""Unit tests for src/trading/kelly.py, src/trading/engine.py, src/trading/bayes.py."""
 from __future__ import annotations
 
 import math
@@ -11,6 +11,7 @@ from config.settings import KELLY_FRACTION, UNIT_STAKE
 from src.scraper.storage import init_schema, upsert_bet
 from src.trading.kelly import kelly_stake
 from src.trading.engine import generate_bets, resolve_bets
+from src.trading.bayes import bayes_scorer, build_bayes_scorer
 
 
 # ---------------------------------------------------------------------------
@@ -217,3 +218,89 @@ def test_resolve_bets_win():
     ).df()
     assert stored.iloc[0]["status"] == "won"
     assert math.isclose(stored.iloc[0]["pnl"], expected_pnl, rel_tol=1e-9)
+
+
+# ---------------------------------------------------------------------------
+# bayes_scorer tests
+# ---------------------------------------------------------------------------
+
+def _make_race_df(
+    race_id: str,
+    runner_ids: list[str],
+    implied_probs: list[float],
+    win_rates: list[float],
+    n_runs: list[int],
+) -> pd.DataFrame:
+    """Build a minimal features DataFrame for bayes_scorer tests."""
+    return pd.DataFrame({
+        "race_id": race_id,
+        "runner_id": runner_ids,
+        "morning_implied_prob_norm": implied_probs,
+        "horse_win_rate": win_rates,
+        "horse_n_runs": n_runs,
+    })
+
+
+def test_bayes_scorer_prior_only():
+    """With no history (n_runs=0), scores are proportional to bookmaker implied probs."""
+    df = _make_race_df(
+        "r1",
+        ["h1", "h2", "h3"],
+        [0.5, 0.3, 0.2],
+        [0.0, 0.0, 0.0],
+        [0, 0, 0],
+    )
+    scores = bayes_scorer(df, kappa=10.0)
+    assert list(scores.index) == ["h1", "h2", "h3"]
+    # With no history, alpha_i = kappa * implied_prob_i → ratios match implied probs
+    assert scores["h1"] > scores["h2"] > scores["h3"]
+    assert math.isclose(scores["h1"] / scores["h2"], 0.5 / 0.3, rel_tol=1e-6)
+
+
+def test_bayes_scorer_history_shifts_probabilities():
+    """A horse with many wins accumulates alpha and rises above its market rank."""
+    df = _make_race_df(
+        "r2",
+        ["h1", "h2"],
+        [0.4, 0.6],   # h2 is market favourite
+        [0.5, 0.1],   # h1 has strong form history
+        [20, 5],      # h1: 10 wins, h2: 0.5 wins
+    )
+    scores = bayes_scorer(df, kappa=1.0)  # low kappa → history dominates
+    # h1: alpha = 1*0.4 + 0.5*20 = 10.4, h2: alpha = 1*0.6 + 0.1*5 = 1.1
+    assert scores["h1"] > scores["h2"]
+
+
+def test_bayes_scorer_missing_implied_prob_falls_back_to_flat():
+    """NaN implied_prob falls back to 1/n flat prior."""
+    df = _make_race_df(
+        "r3",
+        ["h1", "h2", "h3", "h4"],
+        [float("nan")] * 4,
+        [0.0] * 4,
+        [0] * 4,
+    )
+    scores = bayes_scorer(df, kappa=5.0)
+    # All equal with flat prior and no history
+    vals = scores.values
+    assert all(math.isclose(v, vals[0], rel_tol=1e-6) for v in vals)
+
+
+def test_build_bayes_scorer_compatible_with_generate_bets():
+    """build_bayes_scorer() produces a scorer that generate_bets() accepts."""
+    conn = _make_conn()
+    date = "20250110"
+
+    _insert_race(conn, "r_bayes", date, field_size=4)
+    _insert_runner(conn, "rb_1", "r_bayes", 1)
+    _insert_morning_odds(conn, "rb_1", "r_bayes", 20.0)  # longshot → EV+ with flat model
+    for i in [2, 3, 4]:
+        _insert_runner(conn, f"rb_{i}", "r_bayes", i)
+        _insert_morning_odds(conn, f"rb_{i}", "r_bayes", 4.0)
+
+    scorer = build_bayes_scorer(kappa=5.0)
+    bets = generate_bets(conn, date, scorer_fn=scorer, bet_types=["win"], model_source="bayes")
+    # Should not raise; bets may be empty or non-empty depending on EV filter
+    assert isinstance(bets, list)
+    for b in bets:
+        assert b["model_source"] == "bayes"

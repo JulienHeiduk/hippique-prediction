@@ -1,9 +1,12 @@
 """Public API for the trading package."""
+from src.trading.bayes import bayes_scorer, build_bayes_scorer
 from src.trading.engine import compute_today_features, generate_bets, get_ledger, resolve_bets
 from src.trading.reporter import export_bets_html
 from src.trading.scheduler import run_evening_session, run_morning_session, start_scheduler
 
 __all__ = [
+    "bayes_scorer",
+    "build_bayes_scorer",
     "compute_today_features",
     "generate_bets",
     "resolve_bets",
