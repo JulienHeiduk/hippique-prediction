@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Paris PMU — 12/03/2026</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+    font-size: 14px;
+    background: #f4f5f7;
+    color: #1a1a2e;
+    padding: 24px 16px;
+  }
+  h1 {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 6px;
+    color: #1a1a2e;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: #666;
+    margin-bottom: 16px;
+  }
+  /* ── Summary bar ── */
+  .summary {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+  }
+  .summary-card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 12px 18px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    min-width: 110px;
+  }
+  .summary-card .val {
+    font-size: 22px;
+    font-weight: 700;
+    color: #1a1a2e;
+  }
+  .summary-card .lbl {
+    font-size: 11px;
+    color: #888;
+    margin-top: 2px;
+  }
+  .val-pos { color: #2e7d32 !important; }
+  .val-neg { color: #c62828 !important; }
+  /* ── Race blocks ── */
+  .race-block {
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.10);
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .race-header {
+    background: #1a1a2e;
+    color: #fff;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .race-ref {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: .5px;
+  }
+  .race-meta {
+    font-size: 12px;
+    color: #aab;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .race-meta span::before { content: "·"; margin-right: 6px; }
+  .race-meta span:first-child::before { content: ""; margin-right: 0; }
+  .pmu-link {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 600;
+    color: #8ab4f8;
+    text-decoration: none;
+    white-space: nowrap;
+    border: 1px solid rgba(138,180,248,.4);
+    border-radius: 4px;
+    padding: 3px 8px;
+  }
+  .pmu-link:hover { background: rgba(138,180,248,.15); }
+  /* ── Bet rows ── */
+  .bet-row {
+    border-top: 1px solid #eef0f4;
+    padding: 14px 16px;
+    display: grid;
+    grid-template-columns: 90px 1fr auto;
+    gap: 10px;
+    align-items: start;
+  }
+  .bet-row.row-won  { background: #f1faf2; }
+  .bet-row.row-lost { background: #fff8f8; }
+  .badge {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 5px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .8px;
+    text-transform: uppercase;
+  }
+  .badge-win   { background: #e8f5e9; color: #2e7d32; }
+  .badge-duo   { background: #e3f2fd; color: #1565c0; }
+  .badge-place { background: #fff8e1; color: #e65100; }
+  .status-badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .6px;
+    text-transform: uppercase;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .status-won     { background: #2e7d32; color: #fff; }
+  .status-lost    { background: #c62828; color: #fff; }
+  .status-pending { background: #757575; color: #fff; }
+  .model-badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .6px;
+    text-transform: uppercase;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .model-rule { background: #fff8e1; color: #f57f17; }
+  .model-lgbm { background: #e8eaf6; color: #283593; }
+  .horse-line {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1a1a2e;
+    margin-bottom: 3px;
+  }
+  .horse-num {
+    display: inline-block;
+    background: #1a1a2e;
+    color: #fff;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 13px;
+    font-weight: 700;
+    margin-right: 6px;
+  }
+  .bet-stats {
+    font-size: 12px;
+    color: #555;
+    margin-top: 4px;
+  }
+  .bet-stats span { margin-right: 12px; }
+  .result-line {
+    font-size: 12px;
+    margin-top: 5px;
+    color: #444;
+  }
+  .finish-pos {
+    font-weight: 700;
+  }
+  .winner-name {
+    color: #2e7d32;
+    font-weight: 600;
+  }
+  .ev { font-weight: 700; }
+  .ev-high { color: #2e7d32; }
+  .ev-mid  { color: #e65100; }
+  /* ── Odds completeness tag ── */
+  .odds-tag {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+  .odds-ok      { background: rgba(46,125,50,.25);  color: #a5d6a7; }
+  .odds-missing { background: rgba(230,81,0,.30);   color: #ffcc80; }
+  /* ── Stake / P&L column ── */
+  .stake-col {
+    text-align: right;
+    white-space: nowrap;
+  }
+  .stake-amount {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1a1a2e;
+  }
+  .pnl-pos { font-size: 18px; font-weight: 700; color: #2e7d32; }
+  .pnl-neg { font-size: 18px; font-weight: 700; color: #c62828; }
+  .stake-label { font-size: 11px; color: #888; }
+  /* ── Empty state ── */
+  .no-bets {
+    background: #fff;
+    border-radius: 10px;
+    padding: 32px;
+    text-align: center;
+    color: #888;
+    font-size: 15px;
+  }
+  .footer {
+    margin-top: 28px;
+    font-size: 11px;
+    color: #aaa;
+    text-align: center;
+  }
+  @media print {
+    body { background: #fff; padding: 8px; }
+    .race-block { box-shadow: none; border: 1px solid #ccc; }
+    .race-header { background: #333 !important; -webkit-print-color-adjust: exact; }
+    .bet-row.row-won  { background: #f1faf2 !important; -webkit-print-color-adjust: exact; }
+    .bet-row.row-lost { background: #fff8f8 !important; -webkit-print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<h1>Paris du jour — 12/03/2026</h1>
+<p class="subtitle">Généré le 12/03/2026 07:25</p>
+
+<div class="no-bets">Aucun pari EV+ trouvé pour cette date.</div>
+<div class="footer">Système hippique PMU — paper trading uniquement</div>
+</body>
+</html>
