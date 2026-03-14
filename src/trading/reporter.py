@@ -1028,6 +1028,22 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
     duo_hit  = float(duo_stats["hit"].mean()) if not duo_stats.empty else 0.0
 
     # ── Cumulative P&L chart ─────────────────────────────────────────────────
+    # Per-day P&L by bet type for win/duo cumulative lines
+    daily_win = (
+        bets_df[bets_df["bet_type"] == "win"]
+        .groupby("date")["pnl"].sum()
+        .reindex(daily["date"], fill_value=0.0)
+        .cumsum()
+        .values
+    )
+    daily_duo = (
+        bets_df[bets_df["bet_type"] == "duo"]
+        .groupby("date")["pnl"].sum()
+        .reindex(daily["date"], fill_value=0.0)
+        .cumsum()
+        .values
+    )
+
     chart_b64 = ""
     try:
         import matplotlib
@@ -1037,7 +1053,9 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
         fig, ax = plt.subplots(figsize=(10, 3.5))
         x = list(range(len(daily)))
         y = daily["cum_pnl"].tolist()
-        ax.plot(x, y, color="#1565c0", linewidth=2.5, zorder=3)
+        ax.plot(x, y, color="#1565c0", linewidth=2.5, zorder=3, label="Total")
+        ax.plot(x, daily_win, color="#e65100", linewidth=1.5, linestyle="--", zorder=2, label="WIN")
+        ax.plot(x, daily_duo, color="#6a1b9a", linewidth=1.5, linestyle="--", zorder=2, label="DUO")
         ax.fill_between(x, y, 0,
                         where=[v >= 0 for v in y], alpha=0.12, color="#2e7d32")
         ax.fill_between(x, y, 0,
@@ -1048,6 +1066,7 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
         ax.set_ylabel("P&L cumulé (€)", fontsize=10)
         ax.set_title("P&L cumulé — stratégie hybride (WIN Règles + DUO LightGBM)",
                      fontsize=12, fontweight="bold")
+        ax.legend(fontsize=9, loc="upper left")
         ax.grid(axis="y", alpha=0.3)
         ax.spines[["top", "right"]].set_visible(False)
         plt.tight_layout()
@@ -1135,8 +1154,10 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
 <div class="cards">
   <div class="card"><div class="val">{total_bets}</div><div class="lbl">Paris résolus</div></div>
   <div class="card"><div class="val">{total_won}/{total_bets}</div><div class="lbl">Gagnés</div></div>
-  <div class="card"><div class="val {pnl_class}">{total_pnl:+.1f} €</div><div class="lbl">P&amp;L total</div></div>
+  <div class="card"><div class="val {pnl_class}">{total_pnl:+.1f} €</div><div class="lbl">P&amp;L cumulé</div></div>
   <div class="card"><div class="val {roi_class}">{total_roi:+.0%}</div><div class="lbl">ROI global</div></div>
+  <div class="card"><div class="val {wpnl_class}">{win_pnl:+.1f} €</div><div class="lbl">P&amp;L cumulé WIN</div></div>
+  <div class="card"><div class="val {dpnl_class}">{duo_pnl:+.1f} €</div><div class="lbl">P&amp;L cumulé DUO</div></div>
   <div class="card"><div class="val">{len(daily)}</div><div class="lbl">Jours actifs</div></div>
 </div>
 
