@@ -9,35 +9,37 @@ _ROOT = Path(__file__).parent.parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+import re
+
 import streamlit as st
 import streamlit.components.v1 as components
 
-from config.settings import ROOT, DB_PATH
+from config.settings import ROOT
 
 REPORTS_DIR = ROOT / "data" / "reports"
 MODEL_REPORT = REPORTS_DIR / "model_report.html"
+PERFORMANCE_REPORT = REPORTS_DIR / "performance.html"
 
 
 @st.cache_data(ttl=300)
-def _get_cumulative_pnl() -> tuple[float, float, float] | tuple[None, str]:
-    """Return (total, win, duo) cumulative P&L from the database."""
+def _get_cumulative_pnl() -> tuple[float, float, float] | None:
+    """Parse total / WIN / DUO cumulative P&L from performance.html."""
+    if not PERFORMANCE_REPORT.exists():
+        return None
     try:
-        import duckdb
-        conn = duckdb.connect(str(DB_PATH))
-        row = conn.execute("""
-            SELECT
-                SUM(pnl)                                          AS total,
-                SUM(CASE WHEN bet_type = 'win' THEN pnl ELSE 0 END) AS win,
-                SUM(CASE WHEN bet_type = 'duo' THEN pnl ELSE 0 END) AS duo
-            FROM bets
-            WHERE status IN ('won', 'lost')
-        """).fetchone()
-        conn.close()
-        if row and row[0] is not None:
-            return float(row[0]), float(row[1]), float(row[2])
-        return None, "Aucune donnée résolue"
-    except Exception as e:
-        return None, str(e)
+        content = PERFORMANCE_REPORT.read_text(encoding="utf-8")
+        pat = re.compile(
+            r'([+\-]?\d+\.?\d*)\s*€</div>\s*<div class="lbl">P&amp;L cumulé([^<]*)</div>'
+        )
+        values: dict[str, float] = {}
+        for m in pat.finditer(content):
+            label = m.group(2).strip()  # "", "WIN", "DUO"
+            values[label] = float(m.group(1))
+        if "" in values:
+            return values.get(""), values.get("WIN", 0.0), values.get("DUO", 0.0)
+    except Exception:
+        pass
+    return None
 
 
 # ── Page config ───────────────────────────────────────────────────────────────
@@ -73,13 +75,11 @@ with st.sidebar:
 
     st.divider()
     pnl_data = _get_cumulative_pnl()
-    if isinstance(pnl_data, tuple) and pnl_data[0] is not None:
+    if pnl_data is not None:
         total, win, duo = pnl_data
         st.metric("P&L cumulé", f"{total:+.1f} €")
         st.metric("↳ WIN", f"{win:+.1f} €")
         st.metric("↳ DUO", f"{duo:+.1f} €")
-    else:
-        st.warning(pnl_data[1] if isinstance(pnl_data, tuple) else "DB indisponible")
     st.divider()
     st.caption("Paper trading uniquement — Trot PMU")
 
