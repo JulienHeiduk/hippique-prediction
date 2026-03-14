@@ -22,21 +22,36 @@ PERFORMANCE_REPORT = REPORTS_DIR / "performance.html"
 
 
 @st.cache_data(ttl=300)
-def _get_cumulative_pnl() -> tuple[float, float, float] | None:
-    """Parse total / WIN / DUO cumulative P&L from performance.html."""
+def _get_sidebar_stats() -> dict | None:
+    """Parse P&L and bet counts from performance.html."""
     if not PERFORMANCE_REPORT.exists():
         return None
     try:
         content = PERFORMANCE_REPORT.read_text(encoding="utf-8")
-        pat = re.compile(
+
+        pnl_pat = re.compile(
             r'([+\-]?\d+\.?\d*)\s*€</div>\s*<div class="lbl">P&amp;L cumulé([^<]*)</div>'
         )
-        values: dict[str, float] = {}
-        for m in pat.finditer(content):
-            label = m.group(2).strip()  # "", "WIN", "DUO"
-            values[label] = float(m.group(1))
-        if "" in values:
-            return values.get(""), values.get("WIN", 0.0), values.get("DUO", 0.0)
+        pnl: dict[str, float] = {}
+        for m in pnl_pat.finditer(content):
+            pnl[m.group(2).strip()] = float(m.group(1))
+
+        count_pat = re.compile(
+            r'<div class="val">(\d+)</div>\s*<div class="lbl">Paris([^<]*)</div>'
+        )
+        counts: dict[str, int] = {}
+        for m in count_pat.finditer(content):
+            counts[m.group(2).strip()] = int(m.group(1))
+
+        if "" in pnl:
+            return {
+                "pnl_total": pnl.get(""),
+                "pnl_win":   pnl.get("WIN", 0.0),
+                "pnl_duo":   pnl.get("DUO", 0.0),
+                "n_total":   counts.get("résolus", 0),
+                "n_win":     counts.get("WIN", 0),
+                "n_duo":     counts.get("DUO", 0),
+            }
     except Exception:
         pass
     return None
@@ -74,12 +89,11 @@ with st.sidebar:
         selected_path = options[selected_label]
 
     st.divider()
-    pnl_data = _get_cumulative_pnl()
-    if pnl_data is not None:
-        total, win, duo = pnl_data
-        st.metric("P&L cumulé", f"{total:+.1f} €")
-        st.metric("↳ WIN", f"{win:+.1f} €")
-        st.metric("↳ DUO", f"{duo:+.1f} €")
+    stats = _get_sidebar_stats()
+    if stats:
+        st.metric("P&L cumulé", f"{stats['pnl_total']:+.1f} €", f"{stats['n_total']} paris")
+        st.metric("↳ WIN",      f"{stats['pnl_win']:+.1f} €",   f"{stats['n_win']} paris")
+        st.metric("↳ DUO",      f"{stats['pnl_duo']:+.1f} €",   f"{stats['n_duo']} paris")
     st.divider()
     st.caption("Paper trading uniquement — Trot PMU")
 
