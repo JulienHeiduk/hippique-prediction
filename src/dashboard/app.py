@@ -19,11 +19,11 @@ MODEL_REPORT = REPORTS_DIR / "model_report.html"
 
 
 @st.cache_data(ttl=300)
-def _get_cumulative_pnl() -> tuple[float, float, float] | None:
+def _get_cumulative_pnl() -> tuple[float, float, float] | tuple[None, str]:
     """Return (total, win, duo) cumulative P&L from the database."""
     try:
         import duckdb
-        conn = duckdb.connect(str(DB_PATH), read_only=True)
+        conn = duckdb.connect(str(DB_PATH))
         row = conn.execute("""
             SELECT
                 SUM(pnl)                                          AS total,
@@ -35,9 +35,9 @@ def _get_cumulative_pnl() -> tuple[float, float, float] | None:
         conn.close()
         if row and row[0] is not None:
             return float(row[0]), float(row[1]), float(row[2])
-    except Exception:
-        pass
-    return None
+        return None, "Aucune donnée résolue"
+    except Exception as e:
+        return None, str(e)
 
 
 # ── Page config ───────────────────────────────────────────────────────────────
@@ -73,11 +73,13 @@ with st.sidebar:
 
     st.divider()
     pnl_data = _get_cumulative_pnl()
-    if pnl_data is not None:
+    if isinstance(pnl_data, tuple) and pnl_data[0] is not None:
         total, win, duo = pnl_data
         st.metric("P&L cumulé", f"{total:+.1f} €")
-        st.metric("P&L cumulé WIN", f"{win:+.1f} €")
-        st.metric("P&L cumulé DUO", f"{duo:+.1f} €")
+        st.metric("↳ WIN", f"{win:+.1f} €")
+        st.metric("↳ DUO", f"{duo:+.1f} €")
+    else:
+        st.warning(pnl_data[1] if isinstance(pnl_data, tuple) else "DB indisponible")
     st.divider()
     st.caption("Paper trading uniquement — Trot PMU")
 
