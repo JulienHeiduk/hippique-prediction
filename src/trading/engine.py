@@ -13,6 +13,7 @@ from config.settings import EV_THRESHOLD, UNIT_STAKE
 from src.features.form import form_score, extended_form_features
 from src.features.market import odds_features
 from src.features.pipeline import _days_diff
+from src.scraper.client import PMUClient
 from src.scraper.storage import upsert_bet
 from src.trading.kelly import kelly_stake
 
@@ -505,6 +506,27 @@ def generate_bets(
     return bets
 
 
+def _extract_couple_gagnant_dividend(rapports: list, horse_nums: tuple[int, int] | None = None) -> float | None:
+    """Parse E_COUPLE_GAGNANT dividend from rapports-définitifs response.
+
+    Returns gross return per 1€ staked (e.g. 2.90), or None if not found.
+    `horse_nums` is ignored for now — we take the first non-NP rapport entry.
+    dividendePourUnEuro is already expressed per 1€ in centimes (290 → 2.90).
+    """
+    for entry in rapports:
+        if entry.get("typePari") != "E_COUPLE_GAGNANT":
+            continue
+        for rap in entry.get("rapports", []):
+            combo = rap.get("combinaison", "")
+            if "NP" in combo:
+                continue
+            div = rap.get("dividendePourUnEuro") or rap.get("dividende")
+            if div and div > 0:
+                mise_base = entry.get("miseBase", 100)
+                return float(div) / float(mise_base)
+    return None
+
+
 def resolve_bets(
     conn: duckdb.DuckDBPyConnection,
     date: str,
@@ -514,7 +536,7 @@ def resolve_bets(
     Applies the same P&L rules as backtest.py:
       win:   hit = pos1 == 1;  pnl = morning_odds - 1  or -1
       place: hit = pos1 <= 3 (<=2 if field<5); pnl = morning_odds/4 - 1  or -1
-      duo:   hit = {pos1,pos2} == {1,2}; pnl = field²/4 capped 50 - 2  or -2
+      duo:   hit = {pos1,pos2} == {1,2}; pnl = E_COUPLE_GAGNANT_dividend * stake - stake  or -2
 
     Returns summary DataFrame: date, n_bets, n_won, total_stake, total_pnl, roi.
     """
@@ -534,14 +556,15 @@ def resolve_bets(
 
     placeholders = ", ".join(["?"] * len(all_runner_ids))
     runners_sql = f"""
-        SELECT ru.runner_id, ru.race_id, ru.finish_position, ra.field_size
+        SELECT ru.runner_id, ru.race_id, ru.finish_position,
+               COUNT(*) OVER (PARTITION BY ru.race_id) AS actual_field_size
         FROM runners ru
-        JOIN races ra ON ra.race_id = ru.race_id
         WHERE ru.runner_id IN ({placeholders})
+          AND ru.scratch = FALSE
     """
     runners_df = conn.execute(runners_sql, all_runner_ids).df()
     pos_map   = dict(zip(runners_df["runner_id"], runners_df["finish_position"]))
-    field_map = dict(zip(runners_df["runner_id"], runners_df["field_size"]))
+    field_map = dict(zip(runners_df["runner_id"], runners_df["actual_field_size"]))
 
     # Actual final odds (dernierRapportDirect) = real dividend used for P&L.
     # Take the latest snapshot per runner in case multiple were stored.
@@ -569,6 +592,28 @@ def resolve_bets(
             all_race_ids,
         ).df()
         finished_races = set(finished_df["race_id"].tolist())
+
+    # Fetch actual E_COUPLE_GAGNANT dividends for all duo-bet races.
+    # dividend_map: race_id → float (gross return per 1€ staked, e.g. 2.90).
+    # Falls back to None if the API returns nothing.
+    duo_race_ids = pending_df.loc[pending_df["bet_type"] == "duo", "race_id"].unique()
+    race_info_df = conn.execute(
+        f"""
+        SELECT race_id, date, reunion_number, course_number
+        FROM races
+        WHERE race_id IN ({', '.join(['?'] * len(duo_race_ids))})
+        """,
+        list(duo_race_ids),
+    ).df() if len(duo_race_ids) > 0 else pd.DataFrame()
+
+    dividend_map: dict[str, float | None] = {}
+    if not race_info_df.empty:
+        with PMUClient() as pmu:
+            for _, ri in race_info_df.iterrows():
+                rapports = pmu.fetch_rapports_definitifs(
+                    ri["date"], int(ri["reunion_number"]), int(ri["course_number"])
+                )
+                dividend_map[ri["race_id"]] = _extract_couple_gagnant_dividend(rapports)
 
     now = datetime.now(tz=timezone.utc)
     results = []
@@ -637,8 +682,14 @@ def resolve_bets(
             else:
                 hit = set([int(pos1), int(pos2)]) == {1, 2}
                 if hit:
-                    raw_pnl = field_size ** 2 / 4.0
-                    pnl = min(raw_pnl, 50.0) - stake
+                    # Use actual E_COUPLE_GAGNANT dividend when available;
+                    # fall back to field²/4 approximation otherwise.
+                    dividend = dividend_map.get(race_id)
+                    if dividend is not None:
+                        pnl = dividend * stake - stake
+                    else:
+                        raw_pnl = field_size ** 2 / 4.0
+                        pnl = min(raw_pnl, 50.0) - stake
                 else:
                     pnl = -stake
                 status = "won" if hit else "lost"

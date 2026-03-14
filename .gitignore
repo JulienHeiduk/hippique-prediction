@@ -36,3 +36,6 @@ notebooks/.ipynb_checkpoints/
 # OS
 .DS_Store
 Thumbs.db
+
+/data/kaggle/
+/notebooks/05_kaggle_dataset.ipynb

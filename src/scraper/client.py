@@ -8,7 +8,7 @@ from typing import Any
 import httpx
 from loguru import logger
 
-from config.settings import PMU_RACE, PMU_REUNIONS
+from config.settings import PMU_RACE, PMU_REUNIONS, PMU_RAPPORTS
 
 
 class PipelineError(Exception):
@@ -73,6 +73,18 @@ class PMUClient:
         api_date = _to_api_date(date)
         url = PMU_RACE.format(date=api_date, reunion=reunion, course=course)
         return self._get_with_retry(url)
+
+    def fetch_rapports_definitifs(self, date: str, reunion: int, course: int) -> list:
+        """Fetch final dividends for a single race (rapports-définitifs).
+
+        Returns the raw list of pari objects, or [] on 404 (race not finished yet).
+        """
+        api_date = _to_api_date(date)
+        url = PMU_RAPPORTS.format(date=api_date, reunion=reunion, course=course)
+        try:
+            return self._get_with_retry(url)
+        except PipelineError:
+            return []
 
     # ------------------------------------------------------------------
     # Internal

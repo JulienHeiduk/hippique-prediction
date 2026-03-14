@@ -15,6 +15,8 @@ LGBM_DUO_MODEL_PATH = MODEL_DIR / "lgbm_duo_ranker.txt"  # DUO model (label: 2=t
 PMU_BASE = "https://offline.turfinfo.api.pmu.fr/rest/client/7"
 PMU_REUNIONS = f"{PMU_BASE}/programme/{{date}}"          # GET /programme/DDMMYYYY
 PMU_RACE = f"{PMU_BASE}/programme/{{date}}/R{{reunion}}/C{{course}}/participants?specialisation=INTERNET"
+PMU_ONLINE_BASE = "https://online.turfinfo.api.pmu.fr/rest/client/7"
+PMU_RAPPORTS = f"{PMU_ONLINE_BASE}/programme/{{date}}/R{{reunion}}/C{{course}}/rapports-definitifs?specialisation=INTERNET"
 
 # Paper trading
 KELLY_FRACTION = 0.25     # conservative Kelly multiplier
