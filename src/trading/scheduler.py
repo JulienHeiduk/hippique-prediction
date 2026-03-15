@@ -44,7 +44,7 @@ from src.features.pipeline import compute_features
 from src.model.lgbm import train_lgbm, save_lgbm_model, load_lgbm_model, score_lgbm
 from src.model.scorer import optimize_weights, save_rule_weights
 from src.trading.engine import generate_bets, resolve_bets
-from src.trading.reporter import export_bets_html, export_model_report_html
+from src.trading.reporter import export_bets_html, export_model_report_html, export_performance_html
 
 
 def _git_push(path: Path) -> None:
@@ -271,6 +271,10 @@ def run_evening_session(date: str | None = None) -> None:
         model_report_path = export_model_report_html(conn)
         logger.info("Model report updated → {}", model_report_path)
         _git_push(model_report_path)
+
+        perf_path = export_performance_html(conn)
+        logger.info("Performance report updated → {}", perf_path)
+        _git_push(perf_path)
     finally:
         close_connection()
 
