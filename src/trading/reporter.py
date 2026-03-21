@@ -8,7 +8,7 @@ from pathlib import Path
 
 import duckdb
 
-from config.settings import ROOT
+from config.settings import ROOT, UNIT_STAKE
 
 
 REPORTS_DIR = ROOT / "data" / "reports"
@@ -411,15 +411,20 @@ def export_bets_html(
                 pass
 
     # ── 5. Summary stats ────────────────────────────────────────────────────
-    _SCALE = 10  # display multiplier: historical bets stored at 2€, shown at 20€
+    # Per-bet display scale: normalise historical 2€ bets to current UNIT_STAKE.
+    # Old bets stored at 2€ → scale=10; new bets at 20€ → scale=1.
+    def _bet_scale(b: dict) -> float:
+        s = b.get("stake") or UNIT_STAKE
+        return UNIT_STAKE / s if s > 0 else 1.0
+
     n_total   = len(bets)
     n_won     = sum(1 for b in bets if b.get("status") == "won")
     n_lost    = sum(1 for b in bets if b.get("status") == "lost")
     n_pending = sum(1 for b in bets if b.get("status") == "pending")
     resolved  = [b for b in bets if b.get("status") in ("won", "lost")]
-    total_budget = sum(b.get("stake") or 0 for b in bets) * _SCALE
-    total_stake = sum(b.get("stake") or 0 for b in resolved) * _SCALE
-    total_pnl   = sum(b.get("pnl")   or 0 for b in resolved) * _SCALE
+    total_budget = sum((b.get("stake") or 0) * _bet_scale(b) for b in bets)
+    total_stake  = sum((b.get("stake") or 0) * _bet_scale(b) for b in resolved)
+    total_pnl    = sum((b.get("pnl")   or 0) * _bet_scale(b) for b in resolved)
     roi = total_pnl / total_stake if total_stake > 0 else None
 
     def _card(val: str, lbl: str, val_class: str = "") -> str:
@@ -549,8 +554,9 @@ def export_bets_html(
                         result_line = f'<div class="result-line">{" · ".join(parts)}</div>'
 
                 # P&L / stake column
-                stake = (b.get("stake") or 0.0) * _SCALE
-                pnl   = ((b.get("pnl") or 0.0) * _SCALE) if b.get("pnl") is not None else None
+                _sc   = _bet_scale(b)
+                stake = (b.get("stake") or 0.0) * _sc
+                pnl   = ((b.get("pnl") or 0.0) * _sc) if b.get("pnl") is not None else None
                 if status == "won" and pnl is not None:
                     pnl_html     = f'<div class="pnl-pos">+{pnl:.1f} €</div>'
                     amount_label = "gain net"
@@ -897,11 +903,16 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
         output_path.write_text(html, encoding="utf-8")
         return output_path
 
-    # ── Per-day summary ──────────────────────────────────────────────────────
+    # ── Normalise to UNIT_STAKE (old 2€ bets → ×10, new 20€ bets → ×1) ───────
+    bets_df["_scale"] = UNIT_STAKE / bets_df["stake"].clip(lower=0.01)
+    bets_df["_pnl_d"] = bets_df["pnl"]   * bets_df["_scale"]
+    bets_df["_stk_d"] = bets_df["stake"] * bets_df["_scale"]
+
+    # ── Per-day summary (on display-scaled values) ────────────────────────────
     daily = (
         bets_df.groupby("date")
-        .agg(n_bets=("pnl", "count"), n_won=("hit", "sum"),
-             stake=("stake", "sum"), pnl=("pnl", "sum"))
+        .agg(n_bets=("_pnl_d", "count"), n_won=("hit", "sum"),
+             stake=("_stk_d", "sum"), pnl=("_pnl_d", "sum"))
         .reset_index()
     )
     daily["roi"] = daily["pnl"] / daily["stake"]
@@ -910,11 +921,10 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
         lambda d: f"{d[6:8]}/{d[4:6]}/{d[:4]}"
     )
 
-    # ── Overall stats ────────────────────────────────────────────────────────
-    _SCALE = 10  # display multiplier: historical bets stored at 2€, shown at 20€
-    total_bets  = int(bets_df["pnl"].count())
-    total_stake = float(bets_df["stake"].sum()) * _SCALE
-    total_pnl   = float(bets_df["pnl"].sum()) * _SCALE
+    # ── Overall stats ─────────────────────────────────────────────────────────
+    total_bets  = int(bets_df["_pnl_d"].count())
+    total_stake = float(bets_df["_stk_d"].sum())
+    total_pnl   = float(bets_df["_pnl_d"].sum())
     total_roi   = total_pnl / total_stake if total_stake else 0.0
 
     # Per-type stats for the dashboard sidecar
@@ -926,10 +936,10 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
     stats_payload = {
         "pnl_total": round(total_pnl, 2),
         "n_total":   total_bets,
-        "pnl_win":   round(float(win_df["pnl"].sum()) * _SCALE, 2) if not win_df.empty else None,
-        "n_win":     int(win_df["pnl"].count()),
-        "pnl_place": round(float(place_df["pnl"].sum()) * _SCALE, 2) if not place_df.empty else None,
-        "n_place":   int(place_df["pnl"].count()),
+        "pnl_win":   round(float(win_df["_pnl_d"].sum()), 2) if not win_df.empty else None,
+        "n_win":     int(win_df["_pnl_d"].count()),
+        "pnl_place": round(float(place_df["_pnl_d"].sum()), 2) if not place_df.empty else None,
+        "n_place":   int(place_df["_pnl_d"].count()),
     }
     (REPORTS_DIR / "stats.json").write_text(json.dumps(stats_payload), encoding="utf-8")
 
@@ -941,7 +951,7 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
 
         fig, ax = plt.subplots(figsize=(10, 3.5))
         x = list(range(len(daily)))
-        y = (daily["cum_pnl"] * _SCALE).tolist()
+        y = daily["cum_pnl"].tolist()
         ax.plot(x, y, color="#1565c0", linewidth=2.5, zorder=3, label="WIN + Placé")
         ax.fill_between(x, y, 0,
                         where=[v >= 0 for v in y], alpha=0.12, color="#2e7d32")
@@ -978,8 +988,8 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
 
     rows_html = ""
     for _, r in daily.iterrows():
-        pnl_s = f"{r['pnl'] * _SCALE:+.1f}"
-        cum_s = f"{r['cum_pnl'] * _SCALE:+.1f}"
+        pnl_s = f"{r['pnl']:+.1f}"
+        cum_s = f"{r['cum_pnl']:+.1f}"
         roi_s = f"{r['roi']:+.0%}"
         hit_s = f"{r['n_won']}/{int(r['n_bets'])}"
         rows_html += f"""
