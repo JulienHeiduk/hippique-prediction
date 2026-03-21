@@ -1017,8 +1017,8 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
 <div class="cards">
   <div class="card"><div class="val">{total_bets}</div><div class="lbl">Paris résolus</div></div>
   <div class="card"><div class="val">{total_won}/{total_bets}</div><div class="lbl">Gagnés</div></div>
+  <div class="card"><div class="val {wpnl_class}">{win_pnl:+.1f} €</div><div class="lbl">P&amp;L cumulé</div></div>
   <div class="card"><div class="val {roi_class}">{total_roi:+.0%}</div><div class="lbl">ROI global</div></div>
-  <div class="card"><div class="val {wpnl_class}">{win_pnl:+.1f} €</div><div class="lbl">P&amp;L cumulé WIN</div></div>
   <div class="card"><div class="val">{len(win_stats)}</div><div class="lbl">Paris WIN</div></div>
   <div class="card"><div class="val">{win_hit:.0%}</div><div class="lbl">Hit rate WIN</div></div>
   <div class="card"><div class="val">{len(daily)}</div><div class="lbl">Jours actifs</div></div>
