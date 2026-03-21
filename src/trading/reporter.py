@@ -423,11 +423,20 @@ def export_bets_html(
     total_pnl   = sum(b.get("pnl")   or 0 for b in resolved) * _SCALE
     roi = total_pnl / total_stake if total_stake > 0 else None
 
+    # Cumulative P&L up to and including this date (WIN bets only)
+    cum_pnl_row = conn.execute("""
+        SELECT COALESCE(SUM(pnl), 0) AS cum_pnl
+        FROM bets
+        WHERE status IN ('won', 'lost') AND bet_type = 'win' AND date <= ?
+    """, [date]).fetchone()
+    cum_pnl = (cum_pnl_row[0] if cum_pnl_row else 0.0) * _SCALE
+
     def _card(val: str, lbl: str, val_class: str = "") -> str:
         return _SUMMARY_CARD.format(val=val, lbl=lbl, val_class=val_class)
 
-    pnl_class = "val-pos" if total_pnl >= 0 else "val-neg"
-    roi_class = "val-pos" if (roi or 0) >= 0 else "val-neg"
+    pnl_class     = "val-pos" if total_pnl >= 0 else "val-neg"
+    cum_pnl_class = "val-pos" if cum_pnl >= 0 else "val-neg"
+    roi_class     = "val-pos" if (roi or 0) >= 0 else "val-neg"
 
     summary_html = ""
     if n_total:
@@ -437,6 +446,7 @@ def export_bets_html(
             _card(str(n_pending), "en attente"),
             _card(f"{total_budget:.1f} €", "budget du jour"),
             _card(f"{total_pnl:+.1f} €", "P&amp;L", pnl_class),
+            _card(f"{cum_pnl:+.1f} €", "P&amp;L cumulé", cum_pnl_class),
         ]
         if roi is not None:
             cards.append(_card(f"{roi:+.0%}", "ROI", roi_class))
