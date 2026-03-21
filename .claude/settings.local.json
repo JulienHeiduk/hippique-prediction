@@ -26,7 +26,8 @@
       "Bash(.venv/Scripts/python.exe -c \"print\\('hello'\\)\")",
       "Bash(git add:*)",
       "Bash(taskkill:*)",
-      "Bash(cmd //c \"taskkill /PID 48848 /F\" 2>&1; sleep 2)"
+      "Bash(cmd //c \"taskkill /PID 48848 /F\" 2>&1; sleep 2)",
+      "Bash(.venv/Scripts/python.exe -c \":*)"
     ]
   }
 }
