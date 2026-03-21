@@ -23,4 +23,4 @@ KELLY_FRACTION = 0.25     # conservative Kelly multiplier
 EV_THRESHOLD = 1.0        # default EV threshold (model_prob > implied_prob * threshold)
 WIN_EV_THRESHOLD = 1.1    # WIN bets: lgbm scorer, EV>1.1 = +72.5% ROI on 11-14/03/2026
 DUO_EV_THRESHOLD = 1.0    # DUO bets: keep at 1.0 (combined_prob filter already selective)
-UNIT_STAKE = 2.0          # € per unit (paper mode)
+UNIT_STAKE = 20.0         # € per unit (paper mode)

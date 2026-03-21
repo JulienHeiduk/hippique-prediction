@@ -412,14 +412,15 @@ def export_bets_html(
                 pass
 
     # ── 5. Summary stats ────────────────────────────────────────────────────
+    _SCALE = 10  # display multiplier: historical bets stored at 2€, shown at 20€
     n_total   = len(bets)
     n_won     = sum(1 for b in bets if b.get("status") == "won")
     n_lost    = sum(1 for b in bets if b.get("status") == "lost")
     n_pending = sum(1 for b in bets if b.get("status") == "pending")
     resolved  = [b for b in bets if b.get("status") in ("won", "lost")]
-    total_budget = sum(b.get("stake") or 0 for b in bets)
-    total_stake = sum(b.get("stake") or 0 for b in resolved)
-    total_pnl   = sum(b.get("pnl")   or 0 for b in resolved)
+    total_budget = sum(b.get("stake") or 0 for b in bets) * _SCALE
+    total_stake = sum(b.get("stake") or 0 for b in resolved) * _SCALE
+    total_pnl   = sum(b.get("pnl")   or 0 for b in resolved) * _SCALE
     roi = total_pnl / total_stake if total_stake > 0 else None
 
     def _card(val: str, lbl: str, val_class: str = "") -> str:
@@ -549,8 +550,8 @@ def export_bets_html(
                         result_line = f'<div class="result-line">{" · ".join(parts)}</div>'
 
                 # P&L / stake column
-                stake = b.get("stake") or 0.0
-                pnl   = b.get("pnl")
+                stake = (b.get("stake") or 0.0) * _SCALE
+                pnl   = ((b.get("pnl") or 0.0) * _SCALE) if b.get("pnl") is not None else None
                 if status == "won" and pnl is not None:
                     pnl_html     = f'<div class="pnl-pos">+{pnl:.1f} €</div>'
                     amount_label = "gain net"
@@ -897,15 +898,16 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
     )
 
     # ── Overall stats ────────────────────────────────────────────────────────
+    _SCALE = 10  # display multiplier: historical bets stored at 2€, shown at 20€
     total_bets  = int(bets_df["hit"].count())
     total_won   = int(bets_df["hit"].sum())
-    total_stake = float(bets_df["stake"].sum())
-    total_pnl   = float(bets_df["pnl"].sum())
+    total_stake = float(bets_df["stake"].sum()) * _SCALE
+    total_pnl   = float(bets_df["pnl"].sum()) * _SCALE
     total_roi   = total_pnl / total_stake if total_stake else 0.0
 
     win_stats = bets_df[bets_df["bet_type"] == "win"]
-    win_pnl  = float(win_stats["pnl"].sum()) if not win_stats.empty else 0.0
-    win_roi  = win_pnl / float(win_stats["stake"].sum()) if not win_stats.empty else 0.0
+    win_pnl  = float(win_stats["pnl"].sum()) * _SCALE if not win_stats.empty else 0.0
+    win_roi  = win_pnl / (float(win_stats["stake"].sum()) * _SCALE) if not win_stats.empty else 0.0
     win_hit  = float(win_stats["hit"].mean()) if not win_stats.empty else 0.0
 
     chart_b64 = ""
@@ -916,7 +918,7 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
 
         fig, ax = plt.subplots(figsize=(10, 3.5))
         x = list(range(len(daily)))
-        y = daily["cum_pnl"].tolist()
+        y = (daily["cum_pnl"] * _SCALE).tolist()
         ax.plot(x, y, color="#1565c0", linewidth=2.5, zorder=3, label="WIN")
         ax.fill_between(x, y, 0,
                         where=[v >= 0 for v in y], alpha=0.12, color="#2e7d32")
@@ -953,8 +955,8 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
 
     rows_html = ""
     for _, r in daily.iterrows():
-        pnl_s = f"{r['pnl']:+.1f}"
-        cum_s = f"{r['cum_pnl']:+.1f}"
+        pnl_s = f"{r['pnl'] * _SCALE:+.1f}"
+        cum_s = f"{r['cum_pnl'] * _SCALE:+.1f}"
         roi_s = f"{r['roi']:+.0%}"
         hit_s = f"{r['n_won']}/{int(r['n_bets'])}"
         rows_html += f"""
@@ -1015,7 +1017,6 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
 <div class="cards">
   <div class="card"><div class="val">{total_bets}</div><div class="lbl">Paris résolus</div></div>
   <div class="card"><div class="val">{total_won}/{total_bets}</div><div class="lbl">Gagnés</div></div>
-  <div class="card"><div class="val {pnl_class}">{total_pnl:+.1f} €</div><div class="lbl">P&amp;L cumulé</div></div>
   <div class="card"><div class="val {roi_class}">{total_roi:+.0%}</div><div class="lbl">ROI global</div></div>
   <div class="card"><div class="val {wpnl_class}">{win_pnl:+.1f} €</div><div class="lbl">P&amp;L cumulé WIN</div></div>
   <div class="card"><div class="val">{len(win_stats)}</div><div class="lbl">Paris WIN</div></div>
