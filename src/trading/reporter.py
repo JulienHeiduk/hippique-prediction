@@ -435,8 +435,6 @@ def export_bets_html(
             _card(str(n_total),   "paris total"),
             _card(f"{n_won}/{n_won+n_lost}" if (n_won + n_lost) else "0/0", "gagnés"),
             _card(str(n_pending), "en attente"),
-            _card(f"{total_budget:.1f} €", "budget du jour"),
-            _card(f"{total_pnl:+.1f} €", "P&amp;L", pnl_class),
         ]
         if roi is not None:
             cards.append(_card(f"{roi:+.0%}", "ROI", roi_class))
