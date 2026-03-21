@@ -38,7 +38,7 @@ def _release_scheduler_lock() -> None:
     except OSError:
         pass
 
-from config.settings import WIN_EV_THRESHOLD, DUO_EV_THRESHOLD
+from config.settings import WIN_EV_THRESHOLD
 from src.scraper import close_connection, get_connection, run_pipeline
 from src.features.pipeline import compute_features
 from src.model.lgbm import train_lgbm, save_lgbm_model, load_lgbm_model, score_lgbm
@@ -158,9 +158,8 @@ def run_morning_session(date: str | None = None) -> None:
             except Exception as exc:
                 logger.warning("LightGBM training failed: {} — skipping", exc)
 
-        # WIN + DUO bets: both use LightGBM (rule-based WIN dropped — -44.5% ROI vs lgbm +72.5%)
+        # WIN bets only: LightGBM (DUO dropped — negative ROI)
         bets_win = []
-        bets_duo = []
         if lgbm_model is not None:
             lgbm_scorer = lambda df, m=lgbm_model: score_lgbm(df, m)
             bets_win = generate_bets(
@@ -168,15 +167,10 @@ def run_morning_session(date: str | None = None) -> None:
                 scorer_fn=lgbm_scorer, model_source="lgbm",
                 bet_types=["win"], min_race_time=now, ev_threshold=WIN_EV_THRESHOLD,
             )
-            bets_duo = generate_bets(
-                conn, date,
-                scorer_fn=lgbm_scorer, model_source="lgbm",
-                bet_types=["duo"], min_race_time=now, ev_threshold=DUO_EV_THRESHOLD,
-            )
 
         logger.info(
-            "=== {} win (lgbm) + {} duo (lgbm) bets logged for {} ===",
-            len(bets_win), len(bets_duo), date,
+            "=== {} win (lgbm) bets logged for {} ===",
+            len(bets_win), date,
         )
         report_path = export_bets_html(conn, date)
         logger.info("Bet sheet saved → {}", report_path)
@@ -215,22 +209,16 @@ def run_hourly_update(date: str | None = None) -> None:
         lgbm_scorer = (lambda df, m=lgbm_model: score_lgbm(df, m)) if lgbm_model else None
 
         bets_win = []
-        bets_duo = []
         if lgbm_scorer:
             bets_win = generate_bets(
                 conn, date,
                 scorer_fn=lgbm_scorer, model_source="lgbm",
                 bet_types=["win"], min_race_time=now, ev_threshold=WIN_EV_THRESHOLD,
             )
-            bets_duo = generate_bets(
-                conn, date,
-                scorer_fn=lgbm_scorer, model_source="lgbm",
-                bet_types=["duo"], min_race_time=now, ev_threshold=DUO_EV_THRESHOLD,
-            )
 
         logger.info(
-            "{} win (lgbm) + {} duo (lgbm) bets refreshed for {}",
-            len(bets_win), len(bets_duo), date,
+            "{} win (lgbm) bets refreshed for {}",
+            len(bets_win), date,
         )
         report_path = export_bets_html(conn, date)
         logger.info("Bet sheet updated → {}", report_path)

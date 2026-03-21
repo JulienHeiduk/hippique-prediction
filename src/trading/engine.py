@@ -321,7 +321,7 @@ def generate_bets(
         scorer_fn = lambda df, w=weights: score_combined(df, **w)
 
     if bet_types is None:
-        bet_types = ["win", "duo"]
+        bet_types = ["win"]
 
     df = compute_today_features(conn, date)
 

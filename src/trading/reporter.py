@@ -515,11 +515,7 @@ def export_bets_html(
                     num2 = _extract_horse_num(b.get("runner_id_2") or "")
                     horses_html += f"  +  {_horse_tag(num2, b.get('horse_name_2'))}"
 
-                model_source = b.get("model_source", "rule_based")
-                if model_source == "lgbm":
-                    model_badge = '<span class="model-badge model-lgbm">LightGBM</span>'
-                else:
-                    model_badge = '<span class="model-badge model-rule">Règles</span>'
+                model_badge = '<span class="model-badge model-lgbm">LightGBM</span>'
 
                 morning_odds = b.get("morning_odds")
                 odds_str   = f"{morning_odds:.2f}" if morning_odds else "N/A"
@@ -609,17 +605,13 @@ def export_bets_html(
 
 
 def export_model_report_html(conn: duckdb.DuckDBPyConnection) -> Path:
-    """Generate a combined model evaluation report (Rules + LightGBM).
+    """Generate the LightGBM model evaluation report.
 
     Saves to data/reports/model_report.html.
     """
     import pandas as pd
     from src.features.pipeline import compute_features
     from src.model.lgbm import load_lgbm_model, score_lgbm, train_lgbm, FEATURES
-    from src.model.scorer import (
-        load_rule_weights, save_rule_weights, optimize_weights, score_combined,
-        _DEFAULT_WEIGHTS,
-    )
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     output_path = REPORTS_DIR / "model_report.html"
@@ -688,110 +680,7 @@ def export_model_report_html(conn: duckdb.DuckDBPyConnection) -> Path:
                 f'style="width:100%;max-width:800px;border-radius:8px;">')
 
     # ═════════════════════════════════════════════════════════════════════════
-    # SECTION 1 — Règles (WIN bets)
-    # ═════════════════════════════════════════════════════════════════════════
-    weights     = load_rule_weights()
-    rb_scorer   = lambda d, w=weights: score_combined(d, **w)
-
-    rb_is_top1, rb_is_top3, rb_is_ndcg, rb_n_is = _ranking_metrics(df, rb_scorer)
-
-    rb_ho_top1, rb_ho_top3, rb_ho_ndcg, rb_n_ho = 0.0, 0.0, 0.0, 0
-    ho_weights = weights
-    if not holdout_df.empty and not train_df.empty:
-        try:
-            ho_weights, _ = optimize_weights(train_df, bet_type="win")
-            ho_rb_scorer  = lambda d, w=ho_weights: score_combined(d, **w)
-            rb_ho_top1, rb_ho_top3, rb_ho_ndcg, rb_n_ho = _ranking_metrics(
-                holdout_df, ho_rb_scorer)
-        except Exception:
-            pass
-
-    # Weights bar chart
-    rb_chart_b64 = ""
-    try:
-        w_labels = ["w_form", "w_odds", "w_drift", "w_jockey"]
-        w_vals   = [weights.get(k, 0) for k in w_labels]
-        w_total  = sum(w_vals) or 1
-        w_pcts   = [v / w_total * 100 for v in w_vals]
-        w_labels_fr = ["Form", "Cote", "Drift cotes", "Jockey"]
-
-        fig, ax = plt.subplots(figsize=(6, 2.8))
-        bars = ax.barh(w_labels_fr[::-1], w_pcts[::-1], color="#e65100", alpha=0.82)
-        ax.set_xlabel("Poids relatif (%)", fontsize=10)
-        ax.set_title("Poids optimisés — Modèle Règles (WIN)",
-                     fontsize=12, fontweight="bold")
-        ax.spines[["top", "right"]].set_visible(False)
-        ax.grid(axis="x", alpha=0.3)
-        for bar, val in zip(bars, w_pcts[::-1]):
-            ax.text(bar.get_width() + 0.5, bar.get_y() + bar.get_height() / 2,
-                    f"{val:.1f}%", va="center", fontsize=9, color="#333")
-        plt.tight_layout()
-        rb_chart_b64 = _fig_to_b64(fig)
-    except Exception:
-        pass
-
-    # Weights table rows
-    rb_w_rows = ""
-    w_labels_all = ["w_form", "w_odds", "w_drift", "w_jockey"]
-    w_labels_fr_all = ["Form (musique)", "Cote (odds rank)", "Drift cotes", "Jockey win rate"]
-    w_total = sum(weights.get(k, 0) for k in w_labels_all) or 1
-    for key, label in zip(w_labels_all, w_labels_fr_all):
-        val = weights.get(key, 0)
-        pct = val / w_total * 100
-        bar_w = int(pct)
-        rb_w_rows += f"""
-        <tr>
-          <td>{label}</td>
-          <td><code>{val:.2f}</code></td>
-          <td>
-            <div style="display:flex;align-items:center;gap:8px">
-              <div style="background:#e65100;height:10px;width:{bar_w}%;border-radius:3px;min-width:2px;max-width:200px"></div>
-              <span>{pct:.1f}%</span>
-            </div>
-          </td>
-        </tr>"""
-
-    rb_section = f"""
-<div class="model-header rb-header">
-  <span class="model-badge rb-badge">WIN · Règles</span>
-  <span class="model-desc">Score combiné — poids optimisés quotidiennement par grid search (ROI max)</span>
-</div>
-
-<div class="cards">
-  <div class="card"><div class="val">{n_races:,}</div><div class="lbl">Courses (historique)</div></div>
-  <div class="card"><div class="val">{n_runners:,}</div><div class="lbl">Chevaux</div></div>
-  <div class="card"><div class="val">4</div><div class="lbl">Composantes</div></div>
-  <div class="card"><div class="val" style="font-size:14px;line-height:1.4">{date_min}<br>→ {date_max}</div><div class="lbl">Période historique</div></div>
-</div>
-
-<div class="section-title">Métriques de ranking</div>
-<div class="metrics-grid">
-  <div class="metric-card">
-    <h3>In-sample — {rb_n_is:,} courses</h3>
-    <div class="metric-row"><span>Top-1 accuracy</span>{_pct(rb_is_top1)}</div>
-    <div class="metric-row"><span>Top-3 accuracy</span>{_pct(rb_is_top3)}</div>
-    <div class="metric-row"><span>NDCG@1</span>{_pct(rb_is_ndcg)}</div>
-    <p class="note">Poids courants sur toutes les données — optimiste.</p>
-  </div>
-  <div class="metric-card">
-    <h3>Holdout <span class="tag">quasi out-of-sample</span> — {rb_n_ho:,} courses</h3>
-    <div class="metric-row"><span>Top-1 accuracy</span>{_pct(rb_ho_top1)}</div>
-    <div class="metric-row"><span>Top-3 accuracy</span>{_pct(rb_ho_top3)}</div>
-    <div class="metric-row"><span>NDCG@1</span>{_pct(rb_ho_ndcg)}</div>
-    <p class="note">Poids optimisés sur tout sauf les {holdout_n} derniers jours.</p>
-  </div>
-</div>
-
-<div class="section-title">Poids actuels</div>
-<div class="chart-wrap">{_img(rb_chart_b64) if rb_chart_b64 else ""}</div>
-<table>
-  <thead><tr><th>Composante</th><th>Poids brut</th><th>Poids relatif</th></tr></thead>
-  <tbody>{rb_w_rows}</tbody>
-</table>
-"""
-
-    # ═════════════════════════════════════════════════════════════════════════
-    # SECTION 2 — LightGBM (DUO bets)
+    # LightGBM (WIN bets)
     # ═════════════════════════════════════════════════════════════════════════
     lgbm_model = load_lgbm_model()
     lgbm_section = ""
@@ -855,10 +744,8 @@ def export_model_report_html(conn: duckdb.DuckDBPyConnection) -> Path:
         </tr>"""
 
         lgbm_section = f"""
-<div class="divider"></div>
-
 <div class="model-header lgbm-header">
-  <span class="model-badge lgbm-badge">DUO · LightGBM</span>
+  <span class="model-badge lgbm-badge">WIN · LightGBM</span>
   <span class="model-desc">LambdaRank · {n_trees} arbres · {len(FEATURES)} variables · réentraîné quotidiennement</span>
 </div>
 
@@ -897,9 +784,8 @@ def export_model_report_html(conn: duckdb.DuckDBPyConnection) -> Path:
 """
     else:
         lgbm_section = """
-<div class="divider"></div>
 <div class="model-header lgbm-header">
-  <span class="model-badge lgbm-badge">DUO · LightGBM</span>
+  <span class="model-badge lgbm-badge">WIN · LightGBM</span>
 </div>
 <p style="color:#888;padding:16px">Modèle LightGBM non disponible — lancez un entraînement à 08:00.</p>
 """
@@ -959,10 +845,9 @@ def export_model_report_html(conn: duckdb.DuckDBPyConnection) -> Path:
 <h1>Évaluation des modèles</h1>
 <p class="subtitle">Généré le {generated_at}</p>
 
-{rb_section}
 {lgbm_section}
 
-<div class="footer">Stratégie hybride PMU — WIN : Règles · DUO : LightGBM</div>
+<div class="footer">Stratégie PMU — WIN · LightGBM</div>
 </body>
 </html>"""
 
@@ -1019,30 +904,9 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
     total_roi   = total_pnl / total_stake if total_stake else 0.0
 
     win_stats = bets_df[bets_df["bet_type"] == "win"]
-    duo_stats = bets_df[bets_df["bet_type"] == "duo"]
     win_pnl  = float(win_stats["pnl"].sum()) if not win_stats.empty else 0.0
-    duo_pnl  = float(duo_stats["pnl"].sum()) if not duo_stats.empty else 0.0
     win_roi  = win_pnl / float(win_stats["stake"].sum()) if not win_stats.empty else 0.0
-    duo_roi  = duo_pnl / float(duo_stats["stake"].sum()) if not duo_stats.empty else 0.0
     win_hit  = float(win_stats["hit"].mean()) if not win_stats.empty else 0.0
-    duo_hit  = float(duo_stats["hit"].mean()) if not duo_stats.empty else 0.0
-
-    # ── Cumulative P&L chart ─────────────────────────────────────────────────
-    # Per-day P&L by bet type for win/duo cumulative lines
-    daily_win = (
-        bets_df[bets_df["bet_type"] == "win"]
-        .groupby("date")["pnl"].sum()
-        .reindex(daily["date"], fill_value=0.0)
-        .cumsum()
-        .values
-    )
-    daily_duo = (
-        bets_df[bets_df["bet_type"] == "duo"]
-        .groupby("date")["pnl"].sum()
-        .reindex(daily["date"], fill_value=0.0)
-        .cumsum()
-        .values
-    )
 
     chart_b64 = ""
     try:
@@ -1053,9 +917,7 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
         fig, ax = plt.subplots(figsize=(10, 3.5))
         x = list(range(len(daily)))
         y = daily["cum_pnl"].tolist()
-        ax.plot(x, y, color="#1565c0", linewidth=2.5, zorder=3, label="Total")
-        ax.plot(x, daily_win, color="#e65100", linewidth=1.5, linestyle="--", zorder=2, label="WIN")
-        ax.plot(x, daily_duo, color="#6a1b9a", linewidth=1.5, linestyle="--", zorder=2, label="DUO")
+        ax.plot(x, y, color="#1565c0", linewidth=2.5, zorder=3, label="WIN")
         ax.fill_between(x, y, 0,
                         where=[v >= 0 for v in y], alpha=0.12, color="#2e7d32")
         ax.fill_between(x, y, 0,
@@ -1064,7 +926,7 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
         ax.set_xticks(x)
         ax.set_xticklabels(daily["date_label"].tolist(), rotation=30, ha="right", fontsize=9)
         ax.set_ylabel("P&L cumulé (€)", fontsize=10)
-        ax.set_title("P&L cumulé — stratégie hybride (WIN Règles + DUO LightGBM)",
+        ax.set_title("P&L cumulé — stratégie WIN · LightGBM",
                      fontsize=12, fontweight="bold")
         ax.legend(fontsize=9, loc="upper left")
         ax.grid(axis="y", alpha=0.3)
@@ -1108,7 +970,6 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
     pnl_class  = "pos" if total_pnl >= 0 else "neg"
     roi_class  = "pos" if total_roi >= 0 else "neg"
     wpnl_class = "pos" if win_pnl >= 0 else "neg"
-    dpnl_class = "pos" if duo_pnl >= 0 else "neg"
 
     html = f"""<!DOCTYPE html>
 <html lang="fr">
@@ -1149,7 +1010,7 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
 </head>
 <body>
 <h1>Performance — Stratégie Hybride</h1>
-<p class="subtitle">WIN : Règles · DUO : LightGBM &nbsp;|&nbsp; Généré le {generated_at}</p>
+<p class="subtitle">WIN · LightGBM &nbsp;|&nbsp; Généré le {generated_at}</p>
 
 <div class="cards">
   <div class="card"><div class="val">{total_bets}</div><div class="lbl">Paris résolus</div></div>
@@ -1158,30 +1019,11 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
   <div class="card"><div class="val {roi_class}">{total_roi:+.0%}</div><div class="lbl">ROI global</div></div>
   <div class="card"><div class="val {wpnl_class}">{win_pnl:+.1f} €</div><div class="lbl">P&amp;L cumulé WIN</div></div>
   <div class="card"><div class="val">{len(win_stats)}</div><div class="lbl">Paris WIN</div></div>
-  <div class="card"><div class="val {dpnl_class}">{duo_pnl:+.1f} €</div><div class="lbl">P&amp;L cumulé DUO</div></div>
-  <div class="card"><div class="val">{len(duo_stats)}</div><div class="lbl">Paris DUO</div></div>
+  <div class="card"><div class="val">{win_hit:.0%}</div><div class="lbl">Hit rate WIN</div></div>
   <div class="card"><div class="val">{len(daily)}</div><div class="lbl">Jours actifs</div></div>
 </div>
 
 <div class="chart-wrap">{chart_html}</div>
-
-<div class="section-title">Par type de pari</div>
-<div class="breakdown">
-  <div class="bk-card">
-    <h3>WIN · Règles</h3>
-    <div class="bk-row"><span>Paris</span><strong>{len(win_stats)}</strong></div>
-    <div class="bk-row"><span>Hit rate</span><strong>{win_hit:.0%}</strong></div>
-    <div class="bk-row"><span>P&amp;L</span><strong class="{wpnl_class}">{win_pnl:+.1f} €</strong></div>
-    <div class="bk-row"><span>ROI</span><strong class="{'pos' if win_roi>=0 else 'neg'}">{win_roi:+.0%}</strong></div>
-  </div>
-  <div class="bk-card">
-    <h3>DUO · LightGBM</h3>
-    <div class="bk-row"><span>Paris</span><strong>{len(duo_stats)}</strong></div>
-    <div class="bk-row"><span>Hit rate</span><strong>{duo_hit:.0%}</strong></div>
-    <div class="bk-row"><span>P&amp;L</span><strong class="{dpnl_class}">{duo_pnl:+.1f} €</strong></div>
-    <div class="bk-row"><span>ROI</span><strong class="{'pos' if duo_roi>=0 else 'neg'}">{duo_roi:+.0%}</strong></div>
-  </div>
-</div>
 
 <div class="section-title">Détail par jour</div>
 <table>
