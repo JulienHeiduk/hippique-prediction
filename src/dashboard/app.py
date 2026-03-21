@@ -46,7 +46,7 @@ def _get_sidebar_stats() -> dict | None:
         if "" in pnl:
             return {
                 "pnl_total": pnl.get(""),
-                "n_total":   counts.get("résolus", 0),
+                "n_total":   counts.get("résolus", counts.get(" résolus", 0)),
             }
     except Exception:
         pass

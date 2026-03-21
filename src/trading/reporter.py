@@ -912,6 +912,7 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
 
     # ── Overall stats ────────────────────────────────────────────────────────
     _SCALE = 10  # display multiplier: historical bets stored at 2€, shown at 20€
+    total_bets  = int(bets_df["pnl"].count())
     total_stake = float(bets_df["stake"].sum()) * _SCALE
     total_pnl   = float(bets_df["pnl"].sum()) * _SCALE
     total_roi   = total_pnl / total_stake if total_stake else 0.0
@@ -1022,6 +1023,7 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
 <div class="cards">
   <div class="card"><div class="val {pnl_class}">{total_pnl:+.1f} €</div><div class="lbl">P&amp;L cumulé</div></div>
   <div class="card"><div class="val {roi_class}">{total_roi:+.0%}</div><div class="lbl">ROI global</div></div>
+  <div class="card"><div class="val">{total_bets}</div><div class="lbl">Paris résolus</div></div>
   <div class="card"><div class="val">{len(daily)}</div><div class="lbl">Jours actifs</div></div>
 </div>
 
