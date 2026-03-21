@@ -23,7 +23,10 @@
       "Bash(cmd //c \"taskkill /PID 99432 /PID 114032 /PID 26876 /PID 65240 /PID 99880 /F\" 2>&1)",
       "Bash(cmd //c \"tasklist /FI \\\\\"PID eq 99432\\\\\" /FI \\\\\"PID eq 114032\\\\\" /FI \\\\\"PID eq 26876\\\\\" /FI \\\\\"PID eq 65240\\\\\" /FI \\\\\"PID eq 99880\\\\\"\" 2>&1)",
       "Bash(cmd //c \"tasklist | findstr python\" 2>&1)",
-      "Bash(.venv/Scripts/python.exe -c \"print\\('hello'\\)\")"
+      "Bash(.venv/Scripts/python.exe -c \"print\\('hello'\\)\")",
+      "Bash(git add:*)",
+      "Bash(taskkill:*)",
+      "Bash(cmd //c \"taskkill /PID 48848 /F\" 2>&1; sleep 2)"
     ]
   }
 }
