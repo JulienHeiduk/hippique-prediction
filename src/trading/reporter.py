@@ -340,7 +340,7 @@ def export_bets_html(
 
     # ── 1. Load bets from DB ────────────────────────────────────────────────
     bets_df = conn.execute(
-        "SELECT * FROM bets WHERE date = ? AND bet_type = 'win' ORDER BY race_id",
+        "SELECT * FROM bets WHERE date = ? AND bet_type IN ('win', 'place') ORDER BY race_id",
         [date],
     ).df()
 
@@ -866,7 +866,7 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
     bets_df = conn.execute("""
         SELECT date, bet_type, model_source, stake, pnl, status
         FROM bets
-        WHERE status IN ('won', 'lost') AND bet_type = 'win'
+        WHERE status IN ('won', 'lost') AND bet_type IN ('win', 'place')
         ORDER BY date
     """).df()
 
@@ -926,7 +926,7 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
         fig, ax = plt.subplots(figsize=(10, 3.5))
         x = list(range(len(daily)))
         y = (daily["cum_pnl"] * _SCALE).tolist()
-        ax.plot(x, y, color="#1565c0", linewidth=2.5, zorder=3, label="WIN")
+        ax.plot(x, y, color="#1565c0", linewidth=2.5, zorder=3, label="WIN + Placé")
         ax.fill_between(x, y, 0,
                         where=[v >= 0 for v in y], alpha=0.12, color="#2e7d32")
         ax.fill_between(x, y, 0,
@@ -935,7 +935,7 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
         ax.set_xticks(x)
         ax.set_xticklabels(daily["date_label"].tolist(), rotation=30, ha="right", fontsize=9)
         ax.set_ylabel("P&L cumulé (€)", fontsize=10)
-        ax.set_title("P&L cumulé — stratégie WIN · LightGBM",
+        ax.set_title("P&L cumulé — stratégie WIN + Placé · LightGBM",
                      fontsize=12, fontweight="bold")
         ax.legend(fontsize=9, loc="upper left")
         ax.grid(axis="y", alpha=0.3)
@@ -1018,7 +1018,7 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
 </head>
 <body>
 <h1>Performance — Stratégie Hybride</h1>
-<p class="subtitle">WIN · LightGBM &nbsp;|&nbsp; Généré le {generated_at}</p>
+<p class="subtitle">WIN + Placé · LightGBM &nbsp;|&nbsp; Généré le {generated_at}</p>
 
 <div class="cards">
   <div class="card"><div class="val {pnl_class}">{total_pnl:+.1f} €</div><div class="lbl">P&amp;L cumulé</div></div>

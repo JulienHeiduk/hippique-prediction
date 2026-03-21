@@ -502,8 +502,97 @@ def generate_bets(
                     combined_model_prob, combined_implied_prob, ev_ratio_duo,
                 )
 
+        # --- 'place' bet: top-1 runner, finishes in top-3 (or top-2 if field<8) ---
+        if "place" in bet_types:
+            top1 = race_df.iloc[0]
+            place_cutoff = 3 if field_size >= 8 else 2
+            morning_odds_top1 = top1.get("morning_odds")
+            implied_prob_top1 = top1.get("morning_implied_prob_norm")
+
+            if pd.isna(implied_prob_top1) or implied_prob_top1 is None:
+                implied_prob_top1 = 1.0 / field_size
+
+            model_prob_top1 = float(top1["model_prob"])
+
+            # Estimate place probability: Harville approx = place_cutoff × win_prob (capped)
+            model_prob_place = min(model_prob_top1 * place_cutoff, 0.95)
+
+            # Implied place prob from estimated place odds: (win_odds-1)/place_cutoff + 1
+            morning_odds_val_f = float(morning_odds_top1) if morning_odds_top1 and not pd.isna(morning_odds_top1) else None
+            if morning_odds_val_f and morning_odds_val_f > 1:
+                place_odds_est = (morning_odds_val_f - 1.0) / place_cutoff + 1.0
+                implied_place_prob = 1.0 / place_odds_est
+            else:
+                implied_place_prob = float(implied_prob_top1) * place_cutoff
+
+            ev_ratio_place = model_prob_place / implied_place_prob if implied_place_prob > 0 else 0.0
+
+            if model_prob_place > implied_place_prob * ev_threshold:
+                bet_id_place = f"{race_id}_place{_sfx}"
+                existing_place = existing_map.get(bet_id_place, {})
+
+                if existing_place.get("status") in ("won", "lost"):
+                    bets.append(existing_place)
+                else:
+                    morning_odds_val = morning_odds_val_f
+                    if morning_odds_val is None and existing_place.get("morning_odds") is not None:
+                        morning_odds_val = existing_place["morning_odds"]
+                    ks = kelly_stake(model_prob_place, morning_odds_val or field_size)
+                    bet = {
+                        "bet_id": bet_id_place,
+                        "race_id": str(race_id),
+                        "date": date,
+                        "hippodrome": hippodrome,
+                        "bet_type": "place",
+                        "runner_id_1": str(top1["runner_id"]),
+                        "runner_id_2": None,
+                        "horse_name_1": top1.get("horse_name"),
+                        "horse_name_2": None,
+                        "morning_odds": morning_odds_val,
+                        "model_prob": model_prob_place,
+                        "implied_prob": float(implied_place_prob),
+                        "ev_ratio": ev_ratio_place,
+                        "kelly_stake": ks,
+                        "stake": UNIT_STAKE,
+                        "status": "pending",
+                        "pnl": None,
+                        "created_at": existing_place.get("created_at") or now,
+                        "resolved_at": None,
+                        "model_source": model_source,
+                    }
+                    upsert_bet(conn, bet)
+                    bets.append(bet)
+                logger.info(
+                    "BET place | {} | {} | model_prob={:.2%} implied={:.2%} EV={:.2f}",
+                    race_id, top1.get("horse_name"), model_prob_place,
+                    implied_place_prob, ev_ratio_place,
+                )
+
     logger.info("{} bets generated for {}", len(bets), date)
     return bets
+
+
+def _extract_simple_place_dividend(rapports: list, horse_num: int) -> float | None:
+    """Parse E_SIMPLE_PLACE dividend for a specific horse from rapports-définitifs.
+
+    Returns gross return per 1€ staked (e.g. 1.60), or None if not found.
+    dividendePourUnEuro is expressed in centimes (160 → 1.60).
+    """
+    for entry in rapports:
+        if entry.get("typePari") != "E_SIMPLE_PLACE":
+            continue
+        mise_base = entry.get("miseBase", 100)
+        for rap in entry.get("rapports", []):
+            try:
+                combo = int(rap.get("combinaison", -1))
+            except (ValueError, TypeError):
+                continue
+            if combo != horse_num:
+                continue
+            div = rap.get("dividendePourUnEuro") or rap.get("dividende")
+            if div and div > 0:
+                return float(div) / float(mise_base)
+    return None
 
 
 def _extract_couple_gagnant_dividend(rapports: list, horse_nums: tuple[int, int] | None = None) -> float | None:
@@ -615,6 +704,44 @@ def resolve_bets(
                 )
                 dividend_map[ri["race_id"]] = _extract_couple_gagnant_dividend(rapports)
 
+    # Fetch actual E_SIMPLE_PLACE dividends for all place-bet races.
+    # place_dividend_map: race_id → {horse_num → float}
+    place_race_ids = pending_df.loc[pending_df["bet_type"] == "place", "race_id"].unique()
+    place_race_info_df = conn.execute(
+        f"""
+        SELECT race_id, date, reunion_number, course_number
+        FROM races
+        WHERE race_id IN ({', '.join(['?'] * len(place_race_ids))})
+        """,
+        list(place_race_ids),
+    ).df() if len(place_race_ids) > 0 else pd.DataFrame()
+
+    # Build a lookup: runner_id → horse number (numPmu / numero)
+    place_runner_ids = pending_df.loc[pending_df["bet_type"] == "place", "runner_id_1"].dropna().tolist()
+    place_horse_num_map: dict[str, int] = {}
+    if place_runner_ids:
+        ph_place = ", ".join(["?"] * len(place_runner_ids))
+        phn_df = conn.execute(
+            f"SELECT runner_id, numero FROM runners WHERE runner_id IN ({ph_place})",
+            place_runner_ids,
+        ).df()
+        place_horse_num_map = dict(zip(phn_df["runner_id"], phn_df["numero"].astype(int)))
+
+    place_dividend_map: dict[str, dict[int, float]] = {}
+    if not place_race_info_df.empty:
+        with PMUClient() as pmu:
+            for _, ri in place_race_info_df.iterrows():
+                rapports = pmu.fetch_rapports_definitifs(
+                    ri["date"], int(ri["reunion_number"]), int(ri["course_number"])
+                )
+                # Pre-extract dividends for all horse numbers that appear in this race
+                race_divs: dict[int, float] = {}
+                for horse_num in range(1, 30):
+                    d = _extract_simple_place_dividend(rapports, horse_num)
+                    if d is not None:
+                        race_divs[horse_num] = d
+                place_dividend_map[ri["race_id"]] = race_divs
+
     now = datetime.now(tz=timezone.utc)
     results = []
 
@@ -659,11 +786,21 @@ def resolve_bets(
             stake = UNIT_STAKE
             cutoff = 2 if field_size < 5 else 3
             hit = int(pos1) <= cutoff
-            odds = final_odds_map.get(runner_id_1) or (
-                morning_odds if (morning_odds is not None and not pd.isna(morning_odds)) else None
-            )
-            if hit and odds is not None:
-                pnl = (float(odds) / 4.0 - 1.0) * stake
+            # Use actual E_SIMPLE_PLACE dividend when available
+            horse_num = place_horse_num_map.get(runner_id_1)
+            place_dividend = place_dividend_map.get(race_id, {}).get(horse_num) if horse_num else None
+            if hit and place_dividend is not None:
+                pnl = (float(place_dividend) - 1.0) * stake
+            elif hit:
+                # Fallback: approximate from win odds / place_cutoff
+                win_odds = final_odds_map.get(runner_id_1) or (
+                    morning_odds if (morning_odds is not None and not pd.isna(morning_odds)) else None
+                )
+                if win_odds is not None:
+                    place_odds_approx = (float(win_odds) - 1.0) / cutoff + 1.0
+                    pnl = (place_odds_approx - 1.0) * stake
+                else:
+                    pnl = -stake
             else:
                 pnl = -stake
             status = "won" if hit else "lost"
