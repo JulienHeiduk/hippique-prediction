@@ -894,6 +894,20 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
     bets_df["date"] = bets_df["date"].astype(str)
     bets_df["hit"] = bets_df["status"] == "won"
 
+    # Keep only dates that have a corresponding bet sheet HTML
+    existing_dates = {
+        p.stem.replace("bets_", "")
+        for p in REPORTS_DIR.glob("bets_*.html")
+    }
+    bets_df = bets_df[bets_df["date"].isin(existing_dates)]
+    if bets_df.empty:
+        html = f"""<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
+<title>Performance — PMU</title></head><body>
+<h2>Aucune donnée résolue disponible.</h2>
+<p style="color:#888">Généré le {generated_at}</p></body></html>"""
+        output_path.write_text(html, encoding="utf-8")
+        return output_path
+
     # ── Per-day summary ──────────────────────────────────────────────────────
     daily = (
         bets_df.groupby("date")
