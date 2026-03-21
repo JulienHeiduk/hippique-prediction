@@ -436,6 +436,8 @@ def export_bets_html(
             _card(f"{n_won}/{n_won+n_lost}" if (n_won + n_lost) else "0/0", "gagnés"),
             _card(str(n_pending), "en attente"),
         ]
+        if n_won + n_lost > 0:
+            cards.append(_card(f"{total_pnl:+.1f} €", "gain du jour", pnl_class))
         if roi is not None:
             cards.append(_card(f"{roi:+.0%}", "ROI", roi_class))
         summary_html = '<div class="summary">' + "".join(cards) + "</div>"
