@@ -46,11 +46,7 @@ def _get_sidebar_stats() -> dict | None:
         if "" in pnl:
             return {
                 "pnl_total": pnl.get(""),
-                "pnl_win":   pnl.get("WIN", 0.0),
-                "pnl_duo":   pnl.get("DUO", 0.0),
                 "n_total":   counts.get("résolus", 0),
-                "n_win":     counts.get("WIN", 0),
-                "n_duo":     counts.get("DUO", 0),
             }
     except Exception:
         pass
@@ -92,8 +88,6 @@ with st.sidebar:
     stats = _get_sidebar_stats()
     if stats:
         st.metric("P&L cumulé", f"{stats['pnl_total']:+.1f} €", f"{stats['n_total']} paris")
-        st.metric("↳ WIN",      f"{stats['pnl_win']:+.1f} €",   f"{stats['n_win']} paris")
-        st.metric("↳ DUO",      f"{stats['pnl_duo']:+.1f} €",   f"{stats['n_duo']} paris")
     st.divider()
     st.caption("Paper trading uniquement — Trot PMU")
 
