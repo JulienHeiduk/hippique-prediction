@@ -272,7 +272,6 @@ _RACE_BLOCK = """\
 _BET_ROW = """\
   <div class="bet-row {row_class}">
     <div>
-      <span class="badge badge-{bet_type}">{bet_type_label}</span>
       <span class="status-badge status-{status}">{status_label}</span>
       {model_badge}
     </div>
