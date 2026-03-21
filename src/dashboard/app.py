@@ -71,7 +71,7 @@ with st.sidebar:
     st.caption("Paper trading uniquement — Trot PMU")
 
 # ── Main — tabs ───────────────────────────────────────────────────────────────
-tab_bets, tab_model = st.tabs(["📋 Paris du jour", "🤖 Évaluation des modèles"])
+tab_bets, tab_perf, tab_model = st.tabs(["📋 Paris du jour", "📈 Performance", "🤖 Évaluation des modèles"])
 
 with tab_bets:
     if selected_path is None:
@@ -82,6 +82,18 @@ with tab_bets:
     else:
         html_content = selected_path.read_text(encoding="utf-8")
         components.html(html_content, height=900, scrolling=True)
+
+with tab_perf:
+    perf_stats = _get_sidebar_stats()
+    if perf_stats and perf_stats.get("daily"):
+        import pandas as pd
+        daily_df = pd.DataFrame(perf_stats["daily"]).set_index("date")
+        daily_df.index.name = "Jour"
+        daily_df.columns = ["P&L cumulé (€)"]
+        st.line_chart(daily_df, color="#1565c0")
+        st.caption(f"P&L cumulé WIN · LightGBM — {perf_stats['n_total']} paris résolus")
+    else:
+        st.info("Aucune donnée de performance disponible.")
 
 with tab_model:
     if not MODEL_REPORT.exists():

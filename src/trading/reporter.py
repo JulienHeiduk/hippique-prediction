@@ -932,6 +932,10 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
     stats_payload = {
         "pnl_total": round(total_pnl, 2),
         "n_total":   total_bets,
+        "daily": [
+            {"date": r["date_label"], "cum_pnl": round(r["cum_pnl"], 2)}
+            for _, r in daily.iterrows()
+        ],
     }
     (REPORTS_DIR / "stats.json").write_text(json.dumps(stats_payload), encoding="utf-8")
 
