@@ -9,7 +9,7 @@ _ROOT = Path(__file__).parent.parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-import re
+import json
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -18,39 +18,18 @@ from config.settings import ROOT
 
 REPORTS_DIR = ROOT / "data" / "reports"
 MODEL_REPORT = REPORTS_DIR / "model_report.html"
-PERFORMANCE_REPORT = REPORTS_DIR / "performance.html"
+STATS_FILE   = REPORTS_DIR / "stats.json"
 
 
 @st.cache_data(ttl=300)
 def _get_sidebar_stats() -> dict | None:
-    """Parse P&L and bet counts from performance.html."""
-    if not PERFORMANCE_REPORT.exists():
+    """Read pre-computed stats from stats.json (written by export_performance_html)."""
+    if not STATS_FILE.exists():
         return None
     try:
-        content = PERFORMANCE_REPORT.read_text(encoding="utf-8")
-
-        pnl_pat = re.compile(
-            r'([+\-]?\d+\.?\d*)\s*€</div>\s*<div class="lbl">P&amp;L cumulé([^<]*)</div>'
-        )
-        pnl: dict[str, float] = {}
-        for m in pnl_pat.finditer(content):
-            pnl[m.group(2).strip()] = float(m.group(1))
-
-        count_pat = re.compile(
-            r'<div class="val">(\d+)</div>\s*<div class="lbl">Paris([^<]*)</div>'
-        )
-        counts: dict[str, int] = {}
-        for m in count_pat.finditer(content):
-            counts[m.group(2).strip()] = int(m.group(1))
-
-        if "" in pnl:
-            return {
-                "pnl_total": pnl.get(""),
-                "n_total":   counts.get("résolus", counts.get(" résolus", 0)),
-            }
+        return json.loads(STATS_FILE.read_text(encoding="utf-8"))
     except Exception:
-        pass
-    return None
+        return None
 
 
 # ── Page config ───────────────────────────────────────────────────────────────
@@ -87,7 +66,11 @@ with st.sidebar:
     st.divider()
     stats = _get_sidebar_stats()
     if stats:
-        st.metric("P&L cumulé", f"{stats['pnl_total']:+.1f} €", f"{stats['n_total']} paris")
+        st.metric("P&L total", f"{stats['pnl_total']:+.1f} €", f"{stats['n_total']} paris")
+        if stats["pnl_win"] is not None:
+            st.metric("P&L WIN", f"{stats['pnl_win']:+.1f} €", f"{stats['n_win']} paris")
+        if stats["pnl_place"] is not None:
+            st.metric("P&L Placé", f"{stats['pnl_place']:+.1f} €", f"{stats['n_place']} paris")
     st.divider()
     st.caption("Paper trading uniquement — Trot PMU")
 

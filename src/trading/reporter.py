@@ -917,6 +917,22 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
     total_pnl   = float(bets_df["pnl"].sum()) * _SCALE
     total_roi   = total_pnl / total_stake if total_stake else 0.0
 
+    # Per-type stats for the dashboard sidecar
+    win_df   = bets_df[bets_df["bet_type"] == "win"]
+    place_df = bets_df[bets_df["bet_type"] == "place"]
+
+    # ── Write stats.json sidecar for the Streamlit dashboard ─────────────────
+    import json
+    stats_payload = {
+        "pnl_total": round(total_pnl, 2),
+        "n_total":   total_bets,
+        "pnl_win":   round(float(win_df["pnl"].sum()) * _SCALE, 2) if not win_df.empty else None,
+        "n_win":     int(win_df["pnl"].count()),
+        "pnl_place": round(float(place_df["pnl"].sum()) * _SCALE, 2) if not place_df.empty else None,
+        "n_place":   int(place_df["pnl"].count()),
+    }
+    (REPORTS_DIR / "stats.json").write_text(json.dumps(stats_payload), encoding="utf-8")
+
     chart_b64 = ""
     try:
         import matplotlib

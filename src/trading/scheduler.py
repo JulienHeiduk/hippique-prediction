@@ -69,6 +69,9 @@ def _git_push(path: Path) -> None:
         date_label = path.stem.replace("bets_", "")
         msg = f"chore(data): update {date_label} bet sheet"
         subprocess.run(["git", "commit", "-m", msg], check=True, capture_output=True)
+
+        # Pull remote changes before pushing to avoid fast-forward rejection
+        subprocess.run(["git", "pull", "--rebase", "--autostash"], check=True, capture_output=True)
         subprocess.run(["git", "push"], check=True, capture_output=True)
         logger.info("git: pushed {} to GitHub", path.name)
     except subprocess.CalledProcessError as exc:
