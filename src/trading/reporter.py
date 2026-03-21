@@ -340,7 +340,7 @@ def export_bets_html(
 
     # ── 1. Load bets from DB ────────────────────────────────────────────────
     bets_df = conn.execute(
-        "SELECT * FROM bets WHERE date = ? AND bet_type IN ('win', 'place') ORDER BY race_id",
+        "SELECT * FROM bets WHERE date = ? AND bet_type = 'win' ORDER BY race_id",
         [date],
     ).df()
 
@@ -872,7 +872,7 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
     bets_df = conn.execute("""
         SELECT date, bet_type, model_source, stake, pnl, status
         FROM bets
-        WHERE status IN ('won', 'lost') AND bet_type IN ('win', 'place')
+        WHERE status IN ('won', 'lost') AND bet_type = 'win'
         ORDER BY date
     """).df()
 
@@ -927,19 +927,11 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
     total_pnl   = float(bets_df["_pnl_d"].sum())
     total_roi   = total_pnl / total_stake if total_stake else 0.0
 
-    # Per-type stats for the dashboard sidecar
-    win_df   = bets_df[bets_df["bet_type"] == "win"]
-    place_df = bets_df[bets_df["bet_type"] == "place"]
-
     # ── Write stats.json sidecar for the Streamlit dashboard ─────────────────
     import json
     stats_payload = {
         "pnl_total": round(total_pnl, 2),
         "n_total":   total_bets,
-        "pnl_win":   round(float(win_df["_pnl_d"].sum()), 2) if not win_df.empty else None,
-        "n_win":     int(win_df["_pnl_d"].count()),
-        "pnl_place": round(float(place_df["_pnl_d"].sum()), 2) if not place_df.empty else None,
-        "n_place":   int(place_df["_pnl_d"].count()),
     }
     (REPORTS_DIR / "stats.json").write_text(json.dumps(stats_payload), encoding="utf-8")
 
@@ -952,7 +944,7 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
         fig, ax = plt.subplots(figsize=(10, 3.5))
         x = list(range(len(daily)))
         y = daily["cum_pnl"].tolist()
-        ax.plot(x, y, color="#1565c0", linewidth=2.5, zorder=3, label="WIN + Placé")
+        ax.plot(x, y, color="#1565c0", linewidth=2.5, zorder=3, label="WIN")
         ax.fill_between(x, y, 0,
                         where=[v >= 0 for v in y], alpha=0.12, color="#2e7d32")
         ax.fill_between(x, y, 0,
@@ -961,7 +953,7 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
         ax.set_xticks(x)
         ax.set_xticklabels(daily["date_label"].tolist(), rotation=30, ha="right", fontsize=9)
         ax.set_ylabel("P&L cumulé (€)", fontsize=10)
-        ax.set_title("P&L cumulé — stratégie WIN + Placé · LightGBM",
+        ax.set_title("P&L cumulé — stratégie WIN · LightGBM",
                      fontsize=12, fontweight="bold")
         ax.legend(fontsize=9, loc="upper left")
         ax.grid(axis="y", alpha=0.3)
@@ -1044,7 +1036,7 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
 </head>
 <body>
 <h1>Performance — Stratégie Hybride</h1>
-<p class="subtitle">WIN + Placé · LightGBM &nbsp;|&nbsp; Généré le {generated_at}</p>
+<p class="subtitle">WIN · LightGBM &nbsp;|&nbsp; Généré le {generated_at}</p>
 
 <div class="cards">
   <div class="card"><div class="val {pnl_class}">{total_pnl:+.1f} €</div><div class="lbl">P&amp;L cumulé</div></div>

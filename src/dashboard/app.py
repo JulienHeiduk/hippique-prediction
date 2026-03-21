@@ -66,11 +66,7 @@ with st.sidebar:
     st.divider()
     stats = _get_sidebar_stats()
     if stats:
-        st.metric("P&L total", f"{stats['pnl_total']:+.1f} €", f"{stats['n_total']} paris")
-        if stats["pnl_win"] is not None:
-            st.metric("P&L WIN", f"{stats['pnl_win']:+.1f} €", f"{stats['n_win']} paris")
-        if stats["pnl_place"] is not None:
-            st.metric("P&L Placé", f"{stats['pnl_place']:+.1f} €", f"{stats['n_place']} paris")
+        st.metric("P&L cumulé", f"{stats['pnl_total']:+.1f} €", f"{stats['n_total']} paris")
     st.divider()
     st.caption("Paper trading uniquement — Trot PMU")
 
