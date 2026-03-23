@@ -272,6 +272,8 @@ def run_evening_session(date: str | None = None) -> None:
         perf_path = export_performance_html(conn)
         logger.info("Performance report updated → {}", perf_path)
         _git_push(perf_path)
+        stats_path = perf_path.parent / "stats.json"
+        _git_push(stats_path)
     finally:
         close_connection()
 
