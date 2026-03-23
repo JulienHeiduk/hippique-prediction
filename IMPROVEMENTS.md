@@ -16,27 +16,25 @@ The #1 bottleneck. With only ~70 days of data:
 With 6 months:
 - All features in `/information/NEW_FEATURES_CLAUDE.md` can be re-enabled
 - Walk-forward estimates become reliable
-- LightGBM DUO ROI will stabilise
+- LightGBM ROI estimates will stabilise
 
 ---
 
 ## 2. EV Threshold Tuning ✅ Done
 
-**Status:** implemented — `WIN_EV_THRESHOLD = 1.5` in `config/settings.py`
+**Status:** implemented — `WIN_EV_THRESHOLD = 1.1` in `config/settings.py`
 
 Walk-forward grid search results (181 days, rules scorer for WIN):
 
 | EV threshold | WIN ROI | Bets |
 |---|---|---|
 | 1.0 (was default) | 111.7% | 3110 |
-| 1.1 | 111.4% | 3006 |
+| **1.1 (current)** | **111.4%** | **3006** |
 | 1.2 | 112.8% | 2905 |
-| **1.5 (new)** | **117.0%** | **2621** |
+| 1.5 | 117.0% | 2621 |
 | 2.0 | 120.8% | 2122 |
 
-**Decision:** `WIN_EV_THRESHOLD = 1.5` — best ROI/volume trade-off (+5.3% ROI, -16% bets vs 1.0).
-
-**DUO:** EV filter in backtest uses wrong formula (top-1 only instead of combined_model_prob). Production code already uses `combined_model_prob > combined_implied_prob * threshold` — kept at 1.0.
+**Decision:** `WIN_EV_THRESHOLD = 1.1` — live data suggested higher thresholds cut too many bets. Revisit after 3+ months of live results.
 
 ---
 
@@ -65,24 +63,36 @@ The model was overfitting with 300 estimators. `train_lgbm()` auto-loads params 
 
 ---
 
-## 4. DUO-Specific Model ✅ Tested — not beneficial
+## 4. DUO and Place Bets ✅ Removed — WIN only
 
-**Status:** implemented and evaluated; reverted to WIN model for DUO
+**Status:** DUO and Place bet types removed from production. Only WIN bets are generated.
 
 Walk-forward benchmark (181 days, `bet_type=duo`):
 
 | Model | Label | DUO ROI | Hit | Bets |
 |---|---|---|---|---|
-| WIN model (current) | 2=1st, 1=top3, 0=rest | **119.6%** | 21.4% | 3361 |
-| DUO model (new) | 2=top2, 0=rest | 113.0% | 21.3% | 3361 |
+| WIN model | 2=1st, 1=top3, 0=rest | **119.6%** | 21.4% | 3361 |
+| DUO model | 2=top2, 0=rest | 113.0% | 21.3% | 3361 |
 
-**Conclusion:** the DUO-specific label (`2=top2, 0=rest`) is too sparse — only 2 positive grades vs 3 in the WIN label. The WIN model's richer gradient signal learns a stronger ranking that happens to work well for DUO bets.
-
-`train_lgbm_duo()` is preserved in `src/model/lgbm.py` as a utility but is not used in production. Revisit with >6 months of data.
+**Conclusion:** after live testing, Place and DUO bets were dropped. The single WIN strategy with LightGBM is cleaner and easier to monitor. `train_lgbm_duo()` is preserved in `src/model/lgbm.py` but not used. Revisit with >6 months of data if needed.
 
 ---
 
-## 5. Probability Calibration
+## 5. Live Odds for EV Calculation ✅ Done
+
+**Status:** implemented — `generate_bets()` now uses `final_implied_prob_norm` (live odds) instead of `morning_implied_prob_norm` for EV computation, with fallback to morning odds when live odds are not yet available.
+
+Also: pending bets have their odds refreshed on every hourly update so the bet sheet always shows current figures.
+
+---
+
+## 6. 30-Minute Odds Refresh ✅ Done
+
+**Status:** implemented — scheduler runs `run_hourly_update` at `:00` and `:30` of every hour from 10:00 to 22:30 (26 runs/day instead of 13).
+
+---
+
+## 7. Probability Calibration
 
 **Status:** medium effort
 
@@ -94,7 +104,7 @@ Libraries: `sklearn.calibration.CalibratedClassifierCV`.
 
 ---
 
-## 6. CatBoost with Raw Categoricals
+## 8. CatBoost with Raw Categoricals
 
 **Status:** medium effort — new model to evaluate
 
@@ -107,7 +117,7 @@ This would capture track/jockey/trainer effects more richly than rolling win rat
 
 ---
 
-## 7. Race-Level Filtering
+## 9. Race-Level Filtering
 
 **Status:** low effort — filter in `generate_bets()`
 
@@ -124,7 +134,7 @@ Can be tested via a simple boolean column in the features and added as a conditi
 
 ---
 
-## 8. New Features (revisit after more data)
+## 10. New Features (revisit after more data)
 
 See `NEW_FEATURES_CLAUDE.md` for the full backlog.
 
@@ -143,7 +153,7 @@ Features already computed in `pipeline.py` and `engine.py` but currently exclude
 
 ---
 
-## 9. Sequential Form Analysis
+## 11. Sequential Form Analysis
 
 **Status:** low effort — extend `form.py`
 
@@ -156,16 +166,34 @@ These are derivable from `parse_musique()` with no new data.
 
 ---
 
+## 12. Plat (Flat/Gallop) Race Support
+
+**Status:** not started — significant effort
+
+Currently the scraper filters out all non-trot races (`PLAT`, `OBSTACLE`, etc.) at parse time. Adding Plat support would require:
+
+- New feature set: Plat has no `musique` encoding or `km_time` — form must be derived differently (finish positions, margins, official times)
+- Separate LightGBM model trained on Plat data (different dynamics, field sizes, jockey importance)
+- Separate EV threshold calibrated on Plat races
+- Parser changes: remove the `_is_trot()` filter or make it configurable per discipline
+
+Lower priority than trot improvements — start only once the trot strategy is stable and has 6+ months of data.
+
+---
+
 ## Summary Table
 
-| Idea | Impact | Effort | When |
+| Idea | Impact | Effort | Status |
 |---|---|---|---|
-| More historical data (6 months) | ⭐⭐⭐ | Low | Now |
-| EV threshold tuning | ⭐⭐ | Low | ✅ Done (WIN=1.5) |
-| LightGBM hyperparameter tuning | ⭐⭐ | Medium | ✅ Done (+21.7% DUO ROI) |
-| DUO-specific model | ⭐⭐ | Medium | ✅ Tested — WIN label wins |
+| More historical data (6 months) | ⭐⭐⭐ | Low | Ongoing |
+| EV threshold tuning | ⭐⭐ | Low | ✅ Done (WIN=1.1) |
+| LightGBM hyperparameter tuning | ⭐⭐ | Medium | ✅ Done (+21.7% ROI) |
+| DUO / Place bets | ⭐⭐ | Medium | ✅ Removed — WIN only |
+| Live odds for EV | ⭐⭐ | Low | ✅ Done |
+| 30-min odds refresh | ⭐ | Low | ✅ Done |
 | Probability calibration | ⭐ | Medium | After more data |
 | CatBoost with categoricals | ⭐⭐ | Medium | After more data |
 | Race-level filtering | ⭐ | Low | Now |
 | Re-enable new features (km_time etc.) | ⭐⭐⭐ | Zero | After 6 months data |
 | Sequential form analysis | ⭐ | Low | Now |
+| Plat race support | ⭐⭐ | High | After trot is stable |
