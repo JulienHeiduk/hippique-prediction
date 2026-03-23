@@ -283,7 +283,7 @@ def start_scheduler() -> None:
 
     Schedule (all times local):
       08:30        — morning scrape (programme + early odds) → GitHub push
-      10:00–22:00  — hourly odds refresh + bet regen         → GitHub push
+      10:00–22:30  — 30-min odds refresh + bet regen        → GitHub push
       22:30        — evening scrape (results + P&L)          → GitHub push
     """
     if not _acquire_scheduler_lock():
@@ -302,14 +302,14 @@ def start_scheduler() -> None:
     # Morning: single run at 08:30 (odds not yet stable before that)
     scheduler.add_job(run_morning_session, "cron", hour=8, minute=30)
 
-    # Hourly refresh from 10:00 to 22:00 inclusive (13 runs)
-    scheduler.add_job(run_hourly_update, "cron", hour="10-22", minute=0)
+    # 30-min refresh from 10:00 to 22:30 inclusive (26 runs)
+    scheduler.add_job(run_hourly_update, "cron", hour="10-22", minute="0,30")
 
     # Evening resolution at 22:30 (results published ~22:00)
     scheduler.add_job(run_evening_session, "cron", hour=22, minute=30)
 
     logger.info(
-        "Scheduler starting — 08:30 morning / 10:00–22:00 hourly / 22:30 evening"
+        "Scheduler starting — 08:30 morning / 10:00–22:30 every 30min / 22:30 evening"
     )
     try:
         scheduler.start()
