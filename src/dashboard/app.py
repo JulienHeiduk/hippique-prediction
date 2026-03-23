@@ -21,7 +21,6 @@ MODEL_REPORT = REPORTS_DIR / "model_report.html"
 STATS_FILE   = REPORTS_DIR / "stats.json"
 
 
-@st.cache_data(ttl=300)
 def _get_sidebar_stats() -> dict | None:
     """Read pre-computed stats from stats.json (written by export_performance_html)."""
     if not STATS_FILE.exists():
