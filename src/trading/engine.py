@@ -276,6 +276,7 @@ def compute_today_features(
         "morning_odds", "final_odds",
         "morning_odds_rank", "final_odds_rank", "odds_drift_pct",
         "morning_implied_prob", "morning_implied_prob_norm",
+        "final_implied_prob", "final_implied_prob_norm",
         "odds_rank_change", "is_favorite", "field_entropy",
         "form_score",
         "win_rate_last5", "top3_rate_last5", "form_trend",
@@ -348,7 +349,7 @@ def generate_bets(
             df.groupby("race_id")["race_datetime"].first(), errors="coerce"
         )
         future_races = race_datetimes[
-            race_datetimes.isna() | (race_datetimes > cutoff)
+            race_datetimes > cutoff
         ].index
         skipped = set(df["race_id"].unique()) - set(future_races)
         if skipped:
@@ -390,10 +391,16 @@ def generate_bets(
         # --- 'win' bet: top-1 runner ---
         if "win" in bet_types:
             top1 = race_df.iloc[0]
-            morning_odds_top1 = top1.get("morning_odds")
-            implied_prob_top1 = top1.get("morning_implied_prob_norm")
 
-            if pd.isna(implied_prob_top1) or implied_prob_top1 is None:
+            # Prefer live (final) odds for EV — reflects the current market.
+            # Fall back to morning reference when live odds are not yet available.
+            final_implied_top1   = top1.get("final_implied_prob_norm")
+            morning_implied_top1 = top1.get("morning_implied_prob_norm")
+            if final_implied_top1 is not None and not pd.isna(final_implied_top1):
+                implied_prob_top1 = float(final_implied_top1)
+            elif morning_implied_top1 is not None and not pd.isna(morning_implied_top1):
+                implied_prob_top1 = float(morning_implied_top1)
+            else:
                 implied_prob_top1 = 1.0 / field_size
 
             model_prob_top1 = float(top1["model_prob"])
@@ -407,8 +414,15 @@ def generate_bets(
                 if existing_win.get("status") in ("won", "lost"):
                     bets.append(existing_win)  # keep it in the returned list
                 else:
-                    morning_odds_val = float(morning_odds_top1) if not pd.isna(morning_odds_top1) else None
-                    # Preserve valid morning_odds from a previous run if current scrape has none
+                    # Best available odds: prefer live (final) over morning reference
+                    final_odds_top1   = top1.get("final_odds")
+                    morning_odds_top1 = top1.get("morning_odds")
+                    morning_odds_val  = (
+                        float(final_odds_top1)   if final_odds_top1   is not None and not pd.isna(final_odds_top1)   else
+                        float(morning_odds_top1) if morning_odds_top1 is not None and not pd.isna(morning_odds_top1) else
+                        None
+                    )
+                    # Preserve only when truly no odds available now
                     if morning_odds_val is None and existing_win.get("morning_odds") is not None:
                         morning_odds_val = existing_win["morning_odds"]
                     ks = kelly_stake(model_prob_top1, morning_odds_val or field_size)
@@ -448,14 +462,19 @@ def generate_bets(
             top2 = race_df.iloc[1]
             combined_model_prob = float(top1["model_prob"]) + float(top2["model_prob"])
 
-            implied_prob_top1 = top1.get("morning_implied_prob_norm")
-            implied_prob_top2 = top2.get("morning_implied_prob_norm")
-            if pd.isna(implied_prob_top1) or implied_prob_top1 is None:
-                implied_prob_top1 = 1.0 / field_size
-            if pd.isna(implied_prob_top2) or implied_prob_top2 is None:
-                implied_prob_top2 = 1.0 / field_size
+            def _best_implied(row: pd.Series) -> float:
+                fi = row.get("final_implied_prob_norm")
+                mi = row.get("morning_implied_prob_norm")
+                if fi is not None and not pd.isna(fi):
+                    return float(fi)
+                if mi is not None and not pd.isna(mi):
+                    return float(mi)
+                return 1.0 / field_size
 
-            combined_implied_prob = float(implied_prob_top1) + float(implied_prob_top2)
+            implied_prob_top1 = _best_implied(top1)
+            implied_prob_top2 = _best_implied(top2)
+
+            combined_implied_prob = implied_prob_top1 + implied_prob_top2
             ev_ratio_duo = combined_model_prob / combined_implied_prob if combined_implied_prob > 0 else 0.0
 
             if combined_model_prob > combined_implied_prob * ev_threshold:
@@ -466,9 +485,13 @@ def generate_bets(
                 if existing_duo.get("status") in ("won", "lost"):
                     bets.append(existing_duo)  # keep it in the returned list
                 else:
+                    final_odds_top1   = top1.get("final_odds")
                     morning_odds_top1 = top1.get("morning_odds")
-                    morning_odds_val = float(morning_odds_top1) if not pd.isna(morning_odds_top1) else None
-                    # Preserve valid morning_odds from a previous run if current scrape has none
+                    morning_odds_val  = (
+                        float(final_odds_top1)   if final_odds_top1   is not None and not pd.isna(final_odds_top1)   else
+                        float(morning_odds_top1) if morning_odds_top1 is not None and not pd.isna(morning_odds_top1) else
+                        None
+                    )
                     if morning_odds_val is None and existing_duo.get("morning_odds") is not None:
                         morning_odds_val = existing_duo["morning_odds"]
                     ks = kelly_stake(combined_model_prob, morning_odds_val or field_size)
@@ -502,6 +525,63 @@ def generate_bets(
                     combined_model_prob, combined_implied_prob, ev_ratio_duo,
                 )
 
+
+    # ── Refresh odds for pending bets not regenerated in this run ──────────
+    # When a race is processed but no horse clears the EV threshold the
+    # existing pending bet stays in the DB untouched.  Its stored cote may be
+    # stale (e.g. a live-odds fallback from the morning when the reference
+    # price was not yet published).  Update morning_odds / implied_prob /
+    # ev_ratio for those bets so the report always shows current figures.
+    # Only runners whose race is still in the future are eligible — never
+    # touch a race that has already started.
+    cutoff_ts = pd.Timestamp(min_race_time.replace(tzinfo=None)) if min_race_time is not None else None
+    runner_id_to_row: dict = {}
+    for _, row in df.iterrows():
+        rdt = pd.to_datetime(row.get("race_datetime"), errors="coerce")
+        if cutoff_ts is not None and (pd.isna(rdt) or rdt <= cutoff_ts):
+            continue
+        runner_id_to_row[str(row["runner_id"])] = row
+
+    refreshed_ids = {b.get("bet_id") for b in bets if isinstance(b, dict)}
+    for _bet_id, ex in existing_map.items():
+        if ex.get("status") not in (None, "pending"):
+            continue
+        if _bet_id in refreshed_ids:
+            continue
+        runner_id = str(ex.get("runner_id_1") or "")
+        row = runner_id_to_row.get(runner_id)
+        if row is None:
+            continue
+        final_odds_r   = row.get("final_odds")
+        morning_odds_r = row.get("morning_odds")
+        best_odds = (
+            float(final_odds_r)   if final_odds_r   is not None and not pd.isna(final_odds_r)   else
+            float(morning_odds_r) if morning_odds_r is not None and not pd.isna(morning_odds_r) else
+            None
+        )
+        if best_odds is None or best_odds == ex.get("morning_odds"):
+            continue
+        fi = row.get("final_implied_prob_norm")
+        mi = row.get("morning_implied_prob_norm")
+        fresh_impl = (
+            float(fi) if fi is not None and not pd.isna(fi) else
+            float(mi) if mi is not None and not pd.isna(mi) else
+            None
+        )
+        model_p = float(ex.get("model_prob") or 0.0)
+        new_ev  = model_p / fresh_impl if (fresh_impl and fresh_impl > 0) else ex.get("ev_ratio", 0.0)
+        new_ks  = kelly_stake(model_p, best_odds)
+        upsert_bet(conn, {
+            **{k: ex.get(k) for k in ex if k not in ("morning_odds", "implied_prob", "ev_ratio", "kelly_stake")},
+            "morning_odds": best_odds,
+            "implied_prob": fresh_impl if fresh_impl is not None else ex.get("implied_prob"),
+            "ev_ratio":     new_ev,
+            "kelly_stake":  new_ks,
+        })
+        logger.debug(
+            "Refreshed odds for {} | {:.2f} → {:.2f}",
+            _bet_id, ex.get("morning_odds") or 0.0, best_odds,
+        )
 
     logger.info("{} bets generated for {}", len(bets), date)
     return bets

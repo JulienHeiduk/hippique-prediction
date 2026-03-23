@@ -36,6 +36,10 @@ def odds_features(runners_df: pd.DataFrame) -> pd.DataFrame:
     race_sum = df.groupby("race_id")["morning_implied_prob"].transform("sum")
     df["morning_implied_prob_norm"] = df["morning_implied_prob"] / race_sum
 
+    df["final_implied_prob"] = 1.0 / df["final_odds"]
+    race_sum_final = df.groupby("race_id")["final_implied_prob"].transform("sum")
+    df["final_implied_prob_norm"] = df["final_implied_prob"] / race_sum_final
+
     # Rank movement: positive = horse drifted out (market less confident)
     df["odds_rank_change"] = df["morning_odds_rank"] - df["final_odds_rank"]
 
