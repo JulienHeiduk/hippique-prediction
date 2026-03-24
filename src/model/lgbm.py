@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import pandas as pd
 from loguru import logger
 
-from config.settings import LGBM_MODEL_PATH, LGBM_DUO_MODEL_PATH, MODEL_DIR
+from config.settings import LGBM_MODEL_PATH, MODEL_DIR
 
 # Optuna-tuned hyperparameters (written by scripts/tune_lgbm_hyperparams.py)
 _LGBM_PARAMS_PATH = MODEL_DIR / "lgbm_params.json"
@@ -130,70 +130,6 @@ def train_lgbm(df: pd.DataFrame):
     return model
 
 
-def train_lgbm_duo(df: pd.DataFrame):
-    """Train a LightGBM LambdaRank model optimised for DUO bets.
-
-    Same architecture as train_lgbm() but with DUO-specific relevance labels:
-      2 = 1st or 2nd place (the pair the DUO bet needs)
-      0 = all other runners
-
-    Compared to the WIN model (2=1st, 1=top3, 0=rest), this label focuses
-    the ranking signal on top-2 identification rather than winner-only.
-
-    Args:
-        df: Features DataFrame from compute_features() — must contain
-            finish_position (not null) and race_id.
-
-    Returns:
-        Trained LGBMRanker instance.
-    """
-    import lightgbm as lgb
-
-    if df.empty or "finish_position" not in df.columns:
-        raise ValueError("df must contain finish_position for training")
-
-    df = df.sort_values("race_id").copy()
-
-    X = _prepare_X(df)
-
-    # Relevance: 2 = 1st or 2nd (DUO target pair), 0 = rest
-    y = df["finish_position"].apply(
-        lambda p: 2 if p <= 2 else 0
-    ).values
-
-    groups = df.groupby("race_id", sort=True).size().values
-
-    model = lgb.LGBMRanker(
-        objective="lambdarank",
-        metric="ndcg",
-        ndcg_eval_at=[2],
-        n_estimators=300,
-        num_leaves=31,
-        learning_rate=0.05,
-        min_child_samples=10,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        random_state=42,
-        verbose=-1,
-    )
-    model.fit(X, y, group=groups)
-
-    logger.info(
-        "LightGBM DUO LambdaRank trained on {} races / {} runners",
-        len(groups), len(df),
-    )
-    return model
-
-
-def save_lgbm_duo_model(model, path: Path = LGBM_DUO_MODEL_PATH) -> Path:
-    """Save the DUO model to disk."""
-    return save_lgbm_model(model, path)
-
-
-def load_lgbm_duo_model(path: Path = LGBM_DUO_MODEL_PATH):
-    """Load DUO model from disk. Returns None if file not found."""
-    return load_lgbm_model(path)
-
 
 def save_lgbm_model(model, path: Path = LGBM_MODEL_PATH) -> Path:
     """Save the trained model to disk (LightGBM native text format)."""
@@ -266,11 +202,10 @@ def backtest_lgbm_walkforward(
     Args:
         df:             Full features DataFrame from compute_features().
         min_train_days: Minimum number of past days required before testing.
-        bet_type:       "win", "place", or "duo".
+        bet_type:       "win" or "place".
         ev_filter:      Apply EV filter (model_prob > implied_prob).
         ev_threshold:   EV threshold to use when ev_filter=True.
         trainer_fn:     Function to train the model (defaults to train_lgbm).
-                        Pass train_lgbm_duo for DUO-specific label training.
         model_name:     Name for the BacktestReport.
 
     Returns:

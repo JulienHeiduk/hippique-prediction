@@ -9,7 +9,6 @@ RAW_DIR = ROOT / "data" / "raw"
 LOG_DIR = ROOT / "logs"
 MODEL_DIR = ROOT / "data" / "models"
 LGBM_MODEL_PATH = MODEL_DIR / "lgbm_ranker.txt"       # WIN model (label: 2=1st, 1=top3, 0=rest)
-LGBM_DUO_MODEL_PATH = MODEL_DIR / "lgbm_duo_ranker.txt"  # DUO model (label: 2=top2, 0=rest)
 
 # PMU API  (date format in URLs: DDMMYYYY)
 PMU_BASE = "https://offline.turfinfo.api.pmu.fr/rest/client/7"
@@ -22,5 +21,4 @@ PMU_RAPPORTS = f"{PMU_ONLINE_BASE}/programme/{{date}}/R{{reunion}}/C{{course}}/r
 KELLY_FRACTION = 0.25     # conservative Kelly multiplier
 EV_THRESHOLD = 1.0        # default EV threshold (model_prob > implied_prob * threshold)
 WIN_EV_THRESHOLD = 0.8    # WIN bets: lgbm scorer
-DUO_EV_THRESHOLD = 1.0    # DUO bets: keep at 1.0 (combined_prob filter already selective)
 UNIT_STAKE = 20.0         # € per unit (paper mode)

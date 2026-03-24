@@ -312,8 +312,7 @@ def generate_bets(
     2. Score all runners with scorer_fn (defaults to LightGBM)
     3. For each race: compute model_prob, compare to implied_prob
     4. Log 'win' bets for EV+ top-1 runners
-    5. Log 'duo' bets (if field >= 4) when top-2 combo is EV+
-    6. upsert_bet() each qualifying bet (idempotent via deterministic bet_id)
+    5. upsert_bet() each qualifying bet (idempotent via deterministic bet_id)
     7. Return list of bet dicts
     """
     if scorer_fn is None:
@@ -454,75 +453,6 @@ def generate_bets(
                     "BET win | {} | {} | model_prob={:.2%} implied={:.2%} EV={:.2f}",
                     race_id, top1.get("horse_name"), model_prob_top1,
                     implied_prob_top1, ev_ratio,
-                )
-
-        # --- 'duo' bet: top-1 + top-2 ---
-        if "duo" in bet_types and field_size >= 4 and len(race_df) >= 2:
-            top1 = race_df.iloc[0]
-            top2 = race_df.iloc[1]
-            combined_model_prob = float(top1["model_prob"]) + float(top2["model_prob"])
-
-            def _best_implied(row: pd.Series) -> float:
-                fi = row.get("final_implied_prob_norm")
-                mi = row.get("morning_implied_prob_norm")
-                if fi is not None and not pd.isna(fi):
-                    return float(fi)
-                if mi is not None and not pd.isna(mi):
-                    return float(mi)
-                return 1.0 / field_size
-
-            implied_prob_top1 = _best_implied(top1)
-            implied_prob_top2 = _best_implied(top2)
-
-            combined_implied_prob = implied_prob_top1 + implied_prob_top2
-            ev_ratio_duo = combined_model_prob / combined_implied_prob if combined_implied_prob > 0 else 0.0
-
-            if combined_model_prob > combined_implied_prob * ev_threshold:
-                bet_id_duo = f"{race_id}_duo{_sfx}"
-                existing_duo = existing_map.get(bet_id_duo, {})
-
-                # Never overwrite a resolved bet
-                if existing_duo.get("status") in ("won", "lost"):
-                    bets.append(existing_duo)  # keep it in the returned list
-                else:
-                    final_odds_top1   = top1.get("final_odds")
-                    morning_odds_top1 = top1.get("morning_odds")
-                    morning_odds_val  = (
-                        float(final_odds_top1)   if final_odds_top1   is not None and not pd.isna(final_odds_top1)   else
-                        float(morning_odds_top1) if morning_odds_top1 is not None and not pd.isna(morning_odds_top1) else
-                        None
-                    )
-                    if morning_odds_val is None and existing_duo.get("morning_odds") is not None:
-                        morning_odds_val = existing_duo["morning_odds"]
-                    ks = kelly_stake(combined_model_prob, morning_odds_val or field_size)
-                    bet = {
-                        "bet_id": bet_id_duo,
-                        "race_id": str(race_id),
-                        "date": date,
-                        "hippodrome": hippodrome,
-                        "bet_type": "duo",
-                        "runner_id_1": str(top1["runner_id"]),
-                        "runner_id_2": str(top2["runner_id"]),
-                        "horse_name_1": top1.get("horse_name"),
-                        "horse_name_2": top2.get("horse_name"),
-                        "morning_odds": morning_odds_val,
-                        "model_prob": combined_model_prob,
-                        "implied_prob": combined_implied_prob,
-                        "ev_ratio": ev_ratio_duo,
-                        "kelly_stake": ks,
-                        "stake": UNIT_STAKE * 2,
-                        "status": "pending",
-                        "pnl": None,
-                        "created_at": existing_duo.get("created_at") or now,
-                        "resolved_at": None,
-                        "model_source": model_source,
-                    }
-                    upsert_bet(conn, bet)
-                    bets.append(bet)
-                logger.info(
-                    "BET duo | {} | {}+{} | model_prob={:.2%} implied={:.2%} EV={:.2f}",
-                    race_id, top1.get("horse_name"), top2.get("horse_name"),
-                    combined_model_prob, combined_implied_prob, ev_ratio_duo,
                 )
 
 
