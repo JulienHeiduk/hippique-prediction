@@ -1,4 +1,4 @@
-"""Full feature pipeline: query DuckDB → one row per (race, runner)."""
+"""Full feature pipeline: query DuckDB -> one row per (race, runner)."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -20,58 +20,62 @@ def _days_diff(race_date, last_race_date) -> float:
         return float("nan")
 
 
-def compute_features(
+# ---------------------------------------------------------------------------
+# Shared column list (superset of training + production)
+# ---------------------------------------------------------------------------
+_KEEP_COLUMNS = [
+    "runner_id", "race_id", "date", "hippodrome", "race_datetime",
+    "distance_metres", "field_size", "horse_name", "jockey_name",
+    "morning_odds", "final_odds",
+    "morning_odds_rank", "final_odds_rank", "odds_drift_pct",
+    "morning_implied_prob", "morning_implied_prob_norm",
+    "final_implied_prob", "final_implied_prob_norm",
+    "odds_rank_change", "is_favorite", "field_entropy",
+    "form_score",
+    "win_rate_last5", "top3_rate_last5", "form_trend",
+    "best_position_last5", "n_valid_runs",
+    "avg_position_last3", "avg_position_last5",
+    "draw_position", "handicap_distance", "deferre", "race_hour",
+    "jockey_win_rate", "jockey_win_rate_at_track",
+    "trainer_win_rate", "trainer_win_rate_at_track",
+    "horse_n_runs", "horse_win_rate", "horse_win_rate_at_track",
+    "days_since_last_race", "days_since_last_win",
+    "avg_km_time_hist", "best_km_time_hist",
+    "horse_win_rate_at_distance", "horse_avg_position_at_distance",
+    "horse_jockey_win_rate", "horse_jockey_n_races",
+    "finish_position",
+]
+
+
+# ---------------------------------------------------------------------------
+# Shared enrichment (used by both training and production paths)
+# ---------------------------------------------------------------------------
+
+def enrich_base_df(
     conn: duckdb.DuckDBPyConnection,
-    race_ids: list[str] | None = None,
+    base_df: pd.DataFrame,
+    *,
+    morning_odds_fallback: bool = False,
 ) -> pd.DataFrame:
-    """Build feature DataFrame from DuckDB.
+    """Enrich a base runners DataFrame with all features.
 
-    Filters to trot races where finish_position IS NOT NULL.
-    Returns one row per runner.
+    Adds: odds + market features, jockey/trainer/horse/horse-jockey stats,
+    form features, race hour.
+
+    Args:
+        conn: DuckDB connection.
+        base_df: Must contain runner_id, race_id, horse_name, jockey_name,
+                 trainer_name, musique, race_datetime, etc.
+        morning_odds_fallback: If True, fall back to live (final) odds when
+            morning reference odds are not yet published (production mode).
     """
-    race_filter = ""
-    params: list = []
-    if race_ids:
-        placeholders = ", ".join(["?"] * len(race_ids))
-        race_filter = f"AND ra.race_id IN ({placeholders})"
-        params = list(race_ids)
-
-    # --- 1. Base runners + race info ---
-    base_sql = f"""
-        SELECT
-            ru.runner_id,
-            ru.race_id,
-            ra.date,
-            ra.hippodrome,
-            ra.race_datetime,
-            ra.distance_metres,
-            ra.field_size,
-            ru.horse_name,
-            ru.jockey_name,
-            ru.trainer_name,
-            ru.musique,
-            ru.scratch,
-            ru.finish_position,
-            ru.draw_position,
-            ru.handicap_distance,
-            CAST(ru.deferre AS INTEGER) AS deferre
-        FROM runners ru
-        JOIN races ra ON ra.race_id = ru.race_id
-        WHERE ra.is_trot = TRUE
-          AND ru.finish_position IS NOT NULL
-          AND ru.scratch = FALSE
-          {race_filter}
-        ORDER BY ra.date, ru.race_id, ru.horse_number
-    """
-    base_df = conn.execute(base_sql, params).df()
-
     if base_df.empty:
         return pd.DataFrame()
 
     race_ids_in = base_df["race_id"].unique().tolist()
     placeholders = ", ".join(["?"] * len(race_ids_in))
 
-    # --- 2. Morning and final odds ---
+    # --- 1. Morning and final odds ---
     odds_sql = f"""
         SELECT
             runner_id,
@@ -84,7 +88,14 @@ def compute_features(
     """
     odds_df = conn.execute(odds_sql, race_ids_in).df()
 
-    # --- 3. Rolling jockey win rate (no leakage) ---
+    if morning_odds_fallback:
+        # When reference price not yet published (e.g. late races at 08:30),
+        # use live odds so that implied-prob features are not all NaN.
+        odds_df["morning_odds"] = odds_df["morning_odds"].combine_first(
+            odds_df["final_odds"]
+        )
+
+    # --- 2. Rolling jockey win rate (no leakage) ---
     jockey_sql = f"""
         SELECT
             ru.runner_id,
@@ -115,7 +126,7 @@ def compute_features(
         jockey_df["jockey_wins_at_track"] / jockey_df["jockey_starts_at_track"]
     )
 
-    # --- 4. Rolling trainer win rate (same pattern, no leakage) ---
+    # --- 3. Rolling trainer win rate (no leakage) ---
     trainer_sql = f"""
         SELECT
             ru.runner_id,
@@ -146,9 +157,7 @@ def compute_features(
         trainer_df["trainer_wins_at_track"] / trainer_df["trainer_starts_at_track"]
     )
 
-    # --- 5. Horse-level stats from our own race history (no leakage) ---
-    # COUNT(hr.race_id) instead of COUNT(prev.runner_id): hr is NULL when the
-    # LEFT JOIN date filter fails (future races), so only past races are counted.
+    # --- 4. Horse-level stats from race history (no leakage) ---
     horse_sql = f"""
         SELECT
             ru.runner_id,
@@ -164,14 +173,12 @@ def compute_features(
                       AND prev.finish_position = 1 THEN 1.0 ELSE 0.0 END)
                 / NULLIF(SUM(CASE WHEN hr.hippodrome = ra.hippodrome
                                   THEN 1.0 ELSE 0.0 END), 0)                     AS horse_win_rate_at_track,
-            -- F1: km_time history (lower = faster in trot)
             AVG(CASE WHEN hr.race_id IS NOT NULL
                       AND prev.km_time IS NOT NULL AND TRIM(prev.km_time) != ''
                      THEN TRY_CAST(prev.km_time AS DOUBLE) END)                  AS avg_km_time_hist,
             MIN(CASE WHEN hr.race_id IS NOT NULL
                       AND prev.km_time IS NOT NULL AND TRIM(prev.km_time) != ''
                      THEN TRY_CAST(prev.km_time AS DOUBLE) END)                  AS best_km_time_hist,
-            -- F3: distance performance (±500 m band)
             COALESCE(SUM(CASE WHEN hr.race_id IS NOT NULL
                                AND ABS(hr.distance_metres - ra.distance_metres) <= 500
                                AND prev.finish_position = 1 THEN 1.0 ELSE 0.0 END), 0)
@@ -181,7 +188,6 @@ def compute_features(
             AVG(CASE WHEN hr.race_id IS NOT NULL
                       AND ABS(hr.distance_metres - ra.distance_metres) <= 500
                      THEN CAST(prev.finish_position AS DOUBLE) END)              AS horse_avg_position_at_distance,
-            -- F5: last win date
             MAX(CASE WHEN hr.race_id IS NOT NULL
                       AND prev.finish_position = 1 THEN hr.date END)             AS last_win_date
         FROM runners ru
@@ -203,7 +209,7 @@ def compute_features(
         lambda r: _days_diff(r["race_date"], r["last_win_date"]), axis=1
     )
 
-    # --- 5b. Horse–jockey pair stats (F6) ---
+    # --- 5. Horse-jockey pair stats ---
     horse_jockey_sql = f"""
         SELECT
             ru.runner_id,
@@ -227,6 +233,7 @@ def compute_features(
     hj_df = hj_df.rename(columns={"hj_starts": "horse_jockey_n_races"})
 
     # --- 6. Extended form features from musique ---
+    base_df = base_df.copy()
     base_df["form_score"] = base_df["musique"].apply(form_score)
     form_extra = pd.DataFrame(
         base_df["musique"].apply(extended_form_features).tolist()
@@ -262,33 +269,63 @@ def compute_features(
         on="runner_id", how="left",
     )
 
-    # --- 10b. Merge horse–jockey pair stats ---
+    # --- 10b. Merge horse-jockey pair stats ---
     df = df.merge(
         hj_df[["runner_id", "horse_jockey_win_rate", "horse_jockey_n_races"]],
         on="runner_id", how="left",
     )
 
     # --- 11. Select final columns ---
-    keep = [
-        "runner_id", "race_id", "date", "hippodrome", "race_datetime",
-        "distance_metres", "field_size", "horse_name", "jockey_name",
-        "morning_odds", "final_odds",
-        "morning_odds_rank", "final_odds_rank", "odds_drift_pct",
-        "morning_implied_prob", "morning_implied_prob_norm",
-        "odds_rank_change", "is_favorite", "field_entropy",
-        "form_score",
-        "win_rate_last5", "top3_rate_last5", "form_trend",
-        "best_position_last5", "n_valid_runs",
-        "avg_position_last3", "avg_position_last5",
-        "draw_position", "handicap_distance", "deferre", "race_hour",
-        "jockey_win_rate", "jockey_win_rate_at_track",
-        "trainer_win_rate", "trainer_win_rate_at_track",
-        "horse_n_runs", "horse_win_rate", "horse_win_rate_at_track",
-        "days_since_last_race", "days_since_last_win",
-        "avg_km_time_hist", "best_km_time_hist",
-        "horse_win_rate_at_distance", "horse_avg_position_at_distance",
-        "horse_jockey_win_rate", "horse_jockey_n_races",
-        "finish_position",
-    ]
-    available = [c for c in keep if c in df.columns]
+    available = [c for c in _KEEP_COLUMNS if c in df.columns]
     return df[available].reset_index(drop=True)
+
+
+# ---------------------------------------------------------------------------
+# Public entry points
+# ---------------------------------------------------------------------------
+
+def compute_features(
+    conn: duckdb.DuckDBPyConnection,
+    race_ids: list[str] | None = None,
+) -> pd.DataFrame:
+    """Build feature DataFrame from DuckDB (training / backtest path).
+
+    Filters to trot races where finish_position IS NOT NULL.
+    Returns one row per runner.
+    """
+    race_filter = ""
+    params: list = []
+    if race_ids:
+        ph = ", ".join(["?"] * len(race_ids))
+        race_filter = f"AND ra.race_id IN ({ph})"
+        params = list(race_ids)
+
+    base_sql = f"""
+        SELECT
+            ru.runner_id,
+            ru.race_id,
+            ra.date,
+            ra.hippodrome,
+            ra.race_datetime,
+            ra.distance_metres,
+            ra.field_size,
+            ru.horse_name,
+            ru.jockey_name,
+            ru.trainer_name,
+            ru.musique,
+            ru.scratch,
+            ru.finish_position,
+            ru.draw_position,
+            ru.handicap_distance,
+            CAST(ru.deferre AS INTEGER) AS deferre
+        FROM runners ru
+        JOIN races ra ON ra.race_id = ru.race_id
+        WHERE ra.is_trot = TRUE
+          AND ru.finish_position IS NOT NULL
+          AND ru.scratch = FALSE
+          {race_filter}
+        ORDER BY ra.date, ru.race_id, ru.horse_number
+    """
+    base_df = conn.execute(base_sql, params).df()
+
+    return enrich_base_df(conn, base_df, morning_odds_fallback=False)

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import pandas as pd
 from loguru import logger
 
-from config.settings import LGBM_MODEL_PATH, MODEL_DIR
+from config.settings import LGBM_MODEL_PATH, LGBM_MEDIANS_PATH, MODEL_DIR
 
 # Optuna-tuned hyperparameters (written by scripts/tune_lgbm_hyperparams.py)
 _LGBM_PARAMS_PATH = MODEL_DIR / "lgbm_params.json"
@@ -42,6 +42,10 @@ if TYPE_CHECKING:
     from src.model.backtest import BacktestReport
 
 # Features used for training and inference (must exist in the features DataFrame)
+# NOTE: odds_drift_pct and odds_rank_change were REMOVED because they are
+# look-ahead features: in training they capture the full-day market movement
+# (morning -> post-time), but at prediction time only partial drift is
+# available. This caused a train/serve skew.
 FEATURES = [
     # Form features
     "form_score",
@@ -50,11 +54,9 @@ FEATURES = [
     "form_trend",
     "best_position_last5",
     "n_valid_runs",
-    # Market features
+    # Market features (available at prediction time)
     "morning_implied_prob_norm",
-    "odds_drift_pct",
     "morning_odds_rank",
-    "odds_rank_change",
     "is_favorite",
     "field_entropy",
     # Runner features
@@ -75,13 +77,57 @@ FEATURES = [
 ]
 
 
-def _prepare_X(df: pd.DataFrame) -> pd.DataFrame:
-    """Extract and fill feature matrix."""
+def _compute_medians(df: pd.DataFrame) -> dict[str, float]:
+    """Compute median for each feature from a DataFrame (for NaN imputation)."""
+    medians = {}
+    for col in FEATURES:
+        vals = pd.to_numeric(df.get(col, pd.Series(dtype=float)), errors="coerce")
+        med = vals.median()
+        medians[col] = float(med) if pd.notna(med) else 0.0
+    return medians
+
+
+def save_medians(medians: dict[str, float], path: Path = LGBM_MEDIANS_PATH) -> Path:
+    """Save training-time medians to disk for consistent NaN imputation."""
+    import json
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(medians, f, indent=2)
+    logger.info("Feature medians saved -> {}", path)
+    return path
+
+
+def load_medians(path: Path = LGBM_MEDIANS_PATH) -> dict[str, float] | None:
+    """Load training-time medians from disk. Returns None if not found."""
+    import json
+    if not path.exists():
+        logger.warning("Feature medians not found at {} — will use per-batch median", path)
+        return None
+    with open(path) as f:
+        return json.load(f)
+
+
+def _prepare_X(
+    df: pd.DataFrame,
+    medians: dict[str, float] | None = None,
+) -> pd.DataFrame:
+    """Extract and fill feature matrix.
+
+    Args:
+        df: DataFrame containing at least the FEATURES columns.
+        medians: Pre-computed medians from training data. When provided,
+            NaN values are filled using these fixed medians instead of
+            computing per-batch medians (which would cause train/serve skew).
+    """
     X = df.reindex(columns=FEATURES).copy()
     for col in FEATURES:
         X[col] = pd.to_numeric(X[col], errors="coerce").astype(float)
-        median = X[col].median()
-        X[col] = X[col].fillna(median if pd.notna(median) else 0.0)
+        if medians is not None:
+            fill_val = medians.get(col, 0.0)
+        else:
+            med = X[col].median()
+            fill_val = float(med) if pd.notna(med) else 0.0
+        X[col] = X[col].fillna(fill_val)
     return X
 
 
@@ -102,7 +148,11 @@ def train_lgbm(df: pd.DataFrame):
 
     df = df.sort_values("race_id").copy()
 
-    X = _prepare_X(df)
+    # Compute and persist training-time medians for consistent NaN imputation
+    medians = _compute_medians(df)
+    save_medians(medians)
+
+    X = _prepare_X(df, medians=medians)
 
     # Relevance: 2 = winner, 1 = top-3, 0 = rest
     y = df["finish_position"].apply(
@@ -166,7 +216,9 @@ def score_lgbm(df: pd.DataFrame, model=None) -> pd.Series:
     if model is None:
         return pd.Series(0.0, index=df["runner_id"])
 
-    X = _prepare_X(df)
+    # Use training-time medians for NaN imputation (avoids train/serve skew)
+    medians = load_medians()
+    X = _prepare_X(df, medians=medians)
     raw = model.predict(X, num_iteration=model.best_iteration if hasattr(model, "best_iteration") else None)
     result = pd.Series(raw, index=df["runner_id"].values)
 

@@ -9,6 +9,7 @@ RAW_DIR = ROOT / "data" / "raw"
 LOG_DIR = ROOT / "logs"
 MODEL_DIR = ROOT / "data" / "models"
 LGBM_MODEL_PATH = MODEL_DIR / "lgbm_ranker.txt"       # WIN model (label: 2=1st, 1=top3, 0=rest)
+LGBM_MEDIANS_PATH = MODEL_DIR / "lgbm_medians.json"   # Training-time medians for NaN imputation
 
 # PMU API  (date format in URLs: DDMMYYYY)
 PMU_BASE = "https://offline.turfinfo.api.pmu.fr/rest/client/7"
