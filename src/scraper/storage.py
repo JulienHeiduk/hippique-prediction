@@ -128,7 +128,7 @@ def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
             pnl           DOUBLE,
             created_at    TIMESTAMP,
             resolved_at   TIMESTAMP,
-            model_source  VARCHAR DEFAULT 'rule_based'
+            model_source  VARCHAR DEFAULT 'lgbm'
         )
     """)
     # Idempotent migration for existing DBs

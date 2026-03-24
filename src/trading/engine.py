@@ -9,7 +9,7 @@ import pandas as pd
 import duckdb
 from loguru import logger
 
-from config.settings import EV_THRESHOLD, UNIT_STAKE
+from config.settings import WIN_EV_THRESHOLD, UNIT_STAKE
 from src.features.form import form_score, extended_form_features
 from src.features.market import odds_features
 from src.features.pipeline import _days_diff
@@ -299,17 +299,17 @@ def compute_today_features(
 def generate_bets(
     conn: duckdb.DuckDBPyConnection,
     date: str,
-    ev_threshold: float = EV_THRESHOLD,
+    ev_threshold: float = WIN_EV_THRESHOLD,
     scorer_fn: Callable[[pd.DataFrame], pd.Series] | None = None,
     bet_types: list[str] | None = None,
     min_race_time: datetime | None = None,
-    model_source: str = "rule_based",
+    model_source: str = "lgbm",
 ) -> list[dict]:
     """Score today's runners and log EV+ bets to the bets table.
 
     Steps:
     1. compute_today_features() → df
-    2. Score all runners with scorer_fn (defaults to score_combined)
+    2. Score all runners with scorer_fn (defaults to LightGBM)
     3. For each race: compute model_prob, compare to implied_prob
     4. Log 'win' bets for EV+ top-1 runners
     5. Log 'duo' bets (if field >= 4) when top-2 combo is EV+
@@ -317,9 +317,9 @@ def generate_bets(
     7. Return list of bet dicts
     """
     if scorer_fn is None:
-        from src.model.scorer import score_combined, load_rule_weights
-        weights = load_rule_weights()
-        scorer_fn = lambda df, w=weights: score_combined(df, **w)
+        from src.model.lgbm import load_lgbm_model, score_lgbm
+        _model = load_lgbm_model()
+        scorer_fn = lambda df, m=_model: score_lgbm(df, m)
 
     if bet_types is None:
         bet_types = ["win"]
@@ -370,7 +370,7 @@ def generate_bets(
 
     bets: list[dict] = []
     now = datetime.now(tz=timezone.utc)
-    _sfx = "" if model_source == "rule_based" else f"_{model_source}"
+    _sfx = f"_{model_source}"
 
     for race_id, race_df in df.groupby("race_id"):
         race_df = race_df.copy().reset_index(drop=True)

@@ -42,7 +42,6 @@ from config.settings import WIN_EV_THRESHOLD
 from src.scraper import close_connection, get_connection, run_pipeline
 from src.features.pipeline import compute_features
 from src.model.lgbm import train_lgbm, save_lgbm_model, load_lgbm_model, score_lgbm
-from src.model.scorer import optimize_weights, save_rule_weights
 from src.trading.engine import generate_bets, resolve_bets
 from src.trading.reporter import export_bets_html, export_model_report_html, export_performance_html
 
@@ -80,27 +79,6 @@ def _git_push(path: Path) -> None:
     except Exception as exc:
         logger.warning("git push error: {}", exc)
 
-
-def run_retrain_rules() -> None:
-    """Optimise rule-based scorer weights on all resolved historical data.
-
-    Scheduled at 07:30, one hour before the morning session, so the
-    weights are always fresh when WIN bets are generated at 08:30.
-    """
-    logger.info("=== Rule weight optimisation starting ===")
-    conn = get_connection()
-    try:
-        hist_df = compute_features(conn)
-        if hist_df.empty:
-            logger.warning("No historical data — skipping rule weight optimisation")
-            return
-        best_weights, _ = optimize_weights(hist_df, bet_type="win")
-        save_rule_weights(best_weights)
-        logger.info("=== Rule weights updated: {} ===", best_weights)
-    except Exception as exc:
-        logger.error("Rule weight optimisation failed: {}", exc)
-    finally:
-        close_connection()
 
 
 def run_retrain_model() -> None:
@@ -292,9 +270,6 @@ def start_scheduler() -> None:
     from apscheduler.schedulers.blocking import BlockingScheduler
 
     scheduler = BlockingScheduler()
-
-    # Rule weight optimisation at 07:30 (1h before morning session)
-    scheduler.add_job(run_retrain_rules, "cron", hour=7, minute=30)
 
     # LightGBM retraining at 08:00 (30 min before morning session)
     scheduler.add_job(run_retrain_model, "cron", hour=8, minute=0)

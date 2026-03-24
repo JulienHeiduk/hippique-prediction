@@ -158,8 +158,8 @@ def test_generate_bets_empty_no_ev():
         _insert_runner(conn, f"r_eq_{i}", "r_equal", i)
         _insert_morning_odds(conn, f"r_eq_{i}", "r_equal", 4.0)  # equal odds → equal implied prob
 
-    # flat scorer: model_prob = 1/4 = 0.25 = implied_prob_norm → not strictly greater → no bet
-    bets = generate_bets(conn, date, scorer_fn=_flat_scorer, bet_types=["win"])
+    # flat scorer: model_prob = 1/4 = 0.25 = implied_prob_norm → EV=1.0, below threshold=1.1 → no bet
+    bets = generate_bets(conn, date, scorer_fn=_flat_scorer, bet_types=["win"], ev_threshold=1.1)
     assert bets == [], f"Expected 0 bets, got {len(bets)}"
 
 
