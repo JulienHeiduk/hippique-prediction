@@ -21,5 +21,5 @@ PMU_RAPPORTS = f"{PMU_ONLINE_BASE}/programme/{{date}}/R{{reunion}}/C{{course}}/r
 # Paper trading
 KELLY_FRACTION = 0.25     # conservative Kelly multiplier
 EV_THRESHOLD = 1.0        # default EV threshold (model_prob > implied_prob * threshold)
-WIN_EV_THRESHOLD = 0.8    # WIN bets: lgbm scorer
+WIN_EV_THRESHOLD = 1.0    # WIN bets: lgbm scorer
 UNIT_STAKE = 20.0         # € per unit (paper mode)
