@@ -915,7 +915,17 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
              stake=("_stk_d", "sum"), pnl=("_pnl_d", "sum"))
         .reset_index()
     )
-    daily["roi"] = daily["pnl"] / daily["stake"]
+
+    # Expand to all bet-sheet dates (including 0-bet days)
+    all_dates = sorted(
+        p.stem.replace("bets_", "")
+        for p in REPORTS_DIR.glob("bets_*.html")
+    )
+    all_dates_df = pd.DataFrame({"date": all_dates})
+    daily = all_dates_df.merge(daily, on="date", how="left")
+    daily[["n_bets", "n_won", "stake", "pnl"]] = daily[["n_bets", "n_won", "stake", "pnl"]].fillna(0)
+
+    daily["roi"] = daily.apply(lambda r: r["pnl"] / r["stake"] if r["stake"] > 0 else 0.0, axis=1)
     daily["cum_pnl"] = daily["pnl"].cumsum()
     daily["date_label"] = daily["date"].apply(
         lambda d: f"{d[6:8]}/{d[4:6]}/{d[:4]}"
