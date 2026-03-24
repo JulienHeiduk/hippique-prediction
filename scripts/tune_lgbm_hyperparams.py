@@ -1,7 +1,7 @@
 """LightGBM hyperparameter tuning via Optuna — 3-fold time-series CV.
 
 Uses GPU (device_type='gpu' / OpenCL) for faster trial evaluation.
-Optimises for DUO ROI since the rules-based scorer handles WIN bets.
+Optimises for WIN ROI using LightGBM LambdaRank.
 
 Usage:
     python scripts/tune_lgbm_hyperparams.py [--n-trials 50] [--cpu]
@@ -64,7 +64,7 @@ def _cv_roi(
     params: dict,
     device: str,
     n_folds: int = N_FOLDS,
-    bet_type: str = "duo",
+    bet_type: str = "win",
 ) -> float:
     """Time-series k-fold CV — returns mean ROI across folds."""
     from src.model.lgbm import score_lgbm
@@ -126,7 +126,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--n-trials", type=int, default=50)
     parser.add_argument("--cpu", action="store_true", help="Force CPU (disable GPU)")
-    parser.add_argument("--bet-type", default="duo", choices=["win", "duo"])
+    parser.add_argument("--bet-type", default="win", choices=["win"])
     args = parser.parse_args()
 
     device = "cpu" if args.cpu else "gpu"
