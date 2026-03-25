@@ -65,7 +65,9 @@ with st.sidebar:
     st.divider()
     stats = _get_sidebar_stats()
     if stats:
-        st.metric("P&L cumulé", f"{stats['pnl_total']:+.1f} €", f"{stats['n_total']} paris")
+        col_w, col_p = st.columns(2)
+        col_w.metric("P&L WIN", f"{stats['win_pnl_total']:+.1f} €")
+        col_p.metric("P&L Placé", f"{stats['place_pnl_total']:+.1f} €")
     st.divider()
     st.caption("Paper trading uniquement — Trot PMU")
 
@@ -86,11 +88,15 @@ with tab_perf:
     perf_stats = _get_sidebar_stats()
     if perf_stats and perf_stats.get("daily"):
         import pandas as pd
-        daily_df = pd.DataFrame(perf_stats["daily"]).set_index("date")
+        daily_df = pd.DataFrame(perf_stats["daily"])
+        daily_df = daily_df.set_index("date")
         daily_df.index.name = "Jour"
-        daily_df.columns = ["P&L cumulé (€)"]
-        st.line_chart(daily_df, color="#1565c0")
-        st.caption(f"P&L cumulé WIN · LightGBM — {perf_stats['n_total']} paris résolus")
+        daily_df = daily_df.rename(columns={
+            "win_cum_pnl": "P&L cumulé WIN (€)",
+            "place_cum_pnl": "P&L cumulé Placé (€)",
+        })
+        st.line_chart(daily_df[["P&L cumulé WIN (€)", "P&L cumulé Placé (€)"]])
+        st.caption(f"P&L cumulé WIN & Placé · LightGBM — {perf_stats['n_total']} paris résolus")
     else:
         st.info("Aucune donnée de performance disponible.")
 
