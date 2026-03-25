@@ -340,7 +340,7 @@ def export_bets_html(
 
     # ── 1. Load bets from DB ────────────────────────────────────────────────
     bets_df = conn.execute(
-        "SELECT * FROM bets WHERE date = ? AND bet_type = 'win' ORDER BY race_id",
+        "SELECT * FROM bets WHERE date = ? AND bet_type IN ('win', 'place') ORDER BY race_id, bet_type",
         [date],
     ).df()
 

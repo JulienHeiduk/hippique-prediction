@@ -139,19 +139,21 @@ def run_morning_session(date: str | None = None) -> None:
             except Exception as exc:
                 logger.warning("LightGBM training failed: {} — skipping", exc)
 
-        # WIN bets only: LightGBM
-        bets_win = []
+        # WIN + PLACE bets: LightGBM
+        bets_all = []
         if lgbm_model is not None:
             lgbm_scorer = lambda df, m=lgbm_model: score_lgbm(df, m)
-            bets_win = generate_bets(
+            bets_all = generate_bets(
                 conn, date,
                 scorer_fn=lgbm_scorer, model_source="lgbm",
-                bet_types=["win"], min_race_time=now, ev_threshold=WIN_EV_THRESHOLD,
+                bet_types=["win", "place"], min_race_time=now, ev_threshold=WIN_EV_THRESHOLD,
             )
 
+        n_win = sum(1 for b in bets_all if isinstance(b, dict) and b.get("bet_type") == "win")
+        n_place = sum(1 for b in bets_all if isinstance(b, dict) and b.get("bet_type") == "place")
         logger.info(
-            "=== {} win (lgbm) bets logged for {} ===",
-            len(bets_win), date,
+            "=== {} win + {} place (lgbm) bets logged for {} ===",
+            n_win, n_place, date,
         )
         report_path = export_bets_html(conn, date)
         logger.info("Bet sheet saved → {}", report_path)
@@ -189,17 +191,19 @@ def run_hourly_update(date: str | None = None) -> None:
         lgbm_model = load_lgbm_model()
         lgbm_scorer = (lambda df, m=lgbm_model: score_lgbm(df, m)) if lgbm_model else None
 
-        bets_win = []
+        bets_all = []
         if lgbm_scorer:
-            bets_win = generate_bets(
+            bets_all = generate_bets(
                 conn, date,
                 scorer_fn=lgbm_scorer, model_source="lgbm",
-                bet_types=["win"], min_race_time=now, ev_threshold=WIN_EV_THRESHOLD,
+                bet_types=["win", "place"], min_race_time=now, ev_threshold=WIN_EV_THRESHOLD,
             )
 
+        n_win = sum(1 for b in bets_all if isinstance(b, dict) and b.get("bet_type") == "win")
+        n_place = sum(1 for b in bets_all if isinstance(b, dict) and b.get("bet_type") == "place")
         logger.info(
-            "{} win (lgbm) bets refreshed for {}",
-            len(bets_win), date,
+            "{} win + {} place (lgbm) bets refreshed for {}",
+            n_win, n_place, date,
         )
         report_path = export_bets_html(conn, date)
         logger.info("Bet sheet updated → {}", report_path)
