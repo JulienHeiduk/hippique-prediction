@@ -346,15 +346,29 @@ def resolve_bets(
 
     placeholders = ", ".join(["?"] * len(all_runner_ids))
     runners_sql = f"""
-        SELECT ru.runner_id, ru.race_id, ru.finish_position,
-               COUNT(*) OVER (PARTITION BY ru.race_id) AS actual_field_size
+        SELECT ru.runner_id, ru.race_id, ru.finish_position
         FROM runners ru
         WHERE ru.runner_id IN ({placeholders})
           AND ru.scratch = FALSE
     """
     runners_df = conn.execute(runners_sql, all_runner_ids).df()
     pos_map   = dict(zip(runners_df["runner_id"], runners_df["finish_position"]))
-    field_map = dict(zip(runners_df["runner_id"], runners_df["actual_field_size"]))
+
+    # Field size: count ALL non-scratch runners per race (not just bet runners)
+    race_id_list = list(runners_df["race_id"].unique())
+    if race_id_list:
+        ph_races = ", ".join(["?"] * len(race_id_list))
+        field_df = conn.execute(f"""
+            SELECT race_id, COUNT(*) AS field_size
+            FROM runners WHERE race_id IN ({ph_races}) AND scratch = FALSE
+            GROUP BY race_id
+        """, race_id_list).df()
+        race_field_map = dict(zip(field_df["race_id"], field_df["field_size"]))
+    else:
+        race_field_map = {}
+    # Map runner_id → field_size via its race
+    runner_race = dict(zip(runners_df["runner_id"], runners_df["race_id"]))
+    field_map = {rid: race_field_map.get(runner_race[rid], 8) for rid in runner_race}
 
     # Actual final odds (dernierRapportDirect) = real dividend used for P&L.
     # Take the latest snapshot per runner in case multiple were stored.
