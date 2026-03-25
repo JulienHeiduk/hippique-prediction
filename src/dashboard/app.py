@@ -11,10 +11,11 @@ if str(_ROOT) not in sys.path:
 
 import json
 
+import duckdb
 import streamlit as st
 import streamlit.components.v1 as components
 
-from config.settings import ROOT
+from config.settings import DB_PATH, ROOT
 
 REPORTS_DIR = ROOT / "data" / "reports"
 MODEL_REPORT = REPORTS_DIR / "model_report.html"
@@ -74,6 +75,25 @@ with st.sidebar:
 # ── Main — tabs ───────────────────────────────────────────────────────────────
 tab_bets, tab_perf, tab_model = st.tabs(["📋 Paris du jour", "📈 Performance", "🤖 Évaluation des modèles"])
 
+def _get_selected_date(path: Path | None) -> str | None:
+    """Extract YYYYMMDD date string from a bets_YYYYMMDD.html path."""
+    if path is None:
+        return None
+    return path.stem.replace("bets_", "")
+
+
+def _delete_bet(bet_id: str, date: str) -> None:
+    """Delete a bet from DuckDB and regenerate the HTML report for that date."""
+    conn = duckdb.connect(str(DB_PATH))
+    from src.scraper.storage import init_schema
+    init_schema(conn)
+    conn.execute("DELETE FROM bets WHERE bet_id = ?", [bet_id])
+    # Regenerate the HTML report
+    from src.trading.reporter import export_bets_html
+    export_bets_html(conn, date)
+    conn.close()
+
+
 with tab_bets:
     if selected_path is None:
         st.info(
@@ -81,8 +101,44 @@ with tab_bets:
             "Le scheduler génère et pousse automatiquement les fiches chaque jour."
         )
     else:
+        sel_date = _get_selected_date(selected_path)
+
+        # ── Load bets from DuckDB for delete buttons ──────────────────────
+        bets_df = None
+        if sel_date and DB_PATH.exists():
+            try:
+                conn = duckdb.connect(str(DB_PATH), read_only=True)
+                bets_df = conn.execute(
+                    "SELECT bet_id, horse_name_1, bet_type, hippodrome, morning_odds, "
+                    "       model_prob, ev_ratio, stake, status "
+                    "FROM bets WHERE date = ? ORDER BY race_id, bet_type",
+                    [sel_date],
+                ).df()
+                conn.close()
+            except Exception:
+                bets_df = None
+
+        # ── Show HTML report ──────────────────────────────────────────────
         html_content = selected_path.read_text(encoding="utf-8")
         components.html(html_content, height=900, scrolling=True)
+
+        # ── Delete buttons per bet ────────────────────────────────────────
+        if bets_df is not None and not bets_df.empty:
+            st.subheader("Supprimer un pari")
+            for _, row in bets_df.iterrows():
+                bet_id = row["bet_id"]
+                bet_type_label = {"win": "WIN", "place": "PLACÉ"}.get(row["bet_type"], row["bet_type"])
+                odds_str = f"{row['morning_odds']:.2f}" if row["morning_odds"] else "N/A"
+                label = (
+                    f"{row['horse_name_1']} · {bet_type_label} · "
+                    f"cote {odds_str} · EV {row['ev_ratio']:.2f} · "
+                    f"{row['hippodrome']}"
+                )
+                col_label, col_btn = st.columns([5, 1])
+                col_label.write(label)
+                if col_btn.button("Supprimer", key=f"del_{bet_id}"):
+                    _delete_bet(bet_id, sel_date)
+                    st.rerun()
 
 with tab_perf:
     perf_stats = _get_sidebar_stats()
