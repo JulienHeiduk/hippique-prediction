@@ -862,17 +862,19 @@ def export_model_report_html(conn: duckdb.DuckDBPyConnection) -> Path:
 
 
 def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
-    """Generate a cumulative performance report and save to data/reports/performance.html."""
+    """Generate a cumulative performance report with separate WIN/PLACE P&L curves."""
+    import json
+
     import pandas as pd
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     output_path = REPORTS_DIR / "performance.html"
 
-    # ── Load all resolved WIN bets ───────────────────────────────────────────
+    # ── Load all resolved bets (WIN + PLACE) ─────────────────────────────────
     bets_df = conn.execute("""
         SELECT date, bet_type, model_source, stake, pnl, status
         FROM bets
-        WHERE status IN ('won', 'lost') AND bet_type = 'win'
+        WHERE status IN ('won', 'lost') AND bet_type IN ('win', 'place')
         ORDER BY date
     """).df()
 
@@ -908,47 +910,66 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
     bets_df["_pnl_d"] = bets_df["pnl"]   * bets_df["_scale"]
     bets_df["_stk_d"] = bets_df["stake"] * bets_df["_scale"]
 
-    # ── Per-day summary (on display-scaled values) ────────────────────────────
-    daily = (
-        bets_df.groupby("date")
-        .agg(n_bets=("_pnl_d", "count"), n_won=("hit", "sum"),
-             stake=("_stk_d", "sum"), pnl=("_pnl_d", "sum"))
-        .reset_index()
-    )
-
-    # Expand to all bet-sheet dates (including 0-bet days)
+    # ── All bet-sheet dates (including 0-bet days) ───────────────────────────
     all_dates = sorted(
         p.stem.replace("bets_", "")
         for p in REPORTS_DIR.glob("bets_*.html")
     )
     all_dates_df = pd.DataFrame({"date": all_dates})
-    daily = all_dates_df.merge(daily, on="date", how="left")
-    daily[["n_bets", "n_won", "stake", "pnl"]] = daily[["n_bets", "n_won", "stake", "pnl"]].fillna(0)
 
-    daily["roi"] = daily.apply(lambda r: r["pnl"] / r["stake"] if r["stake"] > 0 else 0.0, axis=1)
-    daily["cum_pnl"] = daily["pnl"].cumsum()
-    daily["date_label"] = daily["date"].apply(
-        lambda d: f"{d[6:8]}/{d[4:6]}/{d[:4]}"
-    )
+    # ── Helper: build daily summary for a given bet_type ─────────────────────
+    def _daily_for(bt: str) -> pd.DataFrame:
+        sub = bets_df[bets_df["bet_type"] == bt]
+        if sub.empty:
+            d = all_dates_df.copy()
+            d[["n_bets", "n_won", "stake", "pnl"]] = 0.0
+        else:
+            d = (
+                sub.groupby("date")
+                .agg(n_bets=("_pnl_d", "count"), n_won=("hit", "sum"),
+                     stake=("_stk_d", "sum"), pnl=("_pnl_d", "sum"))
+                .reset_index()
+            )
+            d = all_dates_df.merge(d, on="date", how="left")
+            d[["n_bets", "n_won", "stake", "pnl"]] = d[["n_bets", "n_won", "stake", "pnl"]].fillna(0)
+        d["roi"] = d.apply(lambda r: r["pnl"] / r["stake"] if r["stake"] > 0 else 0.0, axis=1)
+        d["cum_pnl"] = d["pnl"].cumsum()
+        d["date_label"] = d["date"].apply(lambda x: f"{x[6:8]}/{x[4:6]}/{x[:4]}")
+        return d
 
-    # ── Overall stats ─────────────────────────────────────────────────────────
-    total_bets  = int(bets_df["_pnl_d"].count())
-    total_stake = float(bets_df["_stk_d"].sum())
-    total_pnl   = float(bets_df["_pnl_d"].sum())
-    total_roi   = total_pnl / total_stake if total_stake else 0.0
+    daily_win   = _daily_for("win")
+    daily_place = _daily_for("place")
+
+    # ── Overall stats per type ───────────────────────────────────────────────
+    def _totals(bt: str):
+        sub = bets_df[bets_df["bet_type"] == bt]
+        n = int(sub["_pnl_d"].count())
+        stk = float(sub["_stk_d"].sum())
+        pnl = float(sub["_pnl_d"].sum())
+        roi = pnl / stk if stk else 0.0
+        return n, stk, pnl, roi
+
+    win_n, win_stk, win_pnl, win_roi     = _totals("win")
+    place_n, place_stk, place_pnl, place_roi = _totals("place")
 
     # ── Write stats.json sidecar for the Streamlit dashboard ─────────────────
-    import json
     stats_payload = {
-        "pnl_total": round(total_pnl, 2),
-        "n_total":   total_bets,
+        "win_pnl_total":   round(win_pnl, 2),
+        "place_pnl_total": round(place_pnl, 2),
+        "win_n":   win_n,
+        "place_n": place_n,
         "daily": [
-            {"date": r["date_label"], "cum_pnl": round(r["cum_pnl"], 2)}
-            for _, r in daily.iterrows()
+            {
+                "date":         daily_win.iloc[i]["date_label"],
+                "win_cum_pnl":   round(daily_win.iloc[i]["cum_pnl"], 2),
+                "place_cum_pnl": round(daily_place.iloc[i]["cum_pnl"], 2),
+            }
+            for i in range(len(daily_win))
         ],
     }
     (REPORTS_DIR / "stats.json").write_text(json.dumps(stats_payload), encoding="utf-8")
 
+    # ── Chart: two curves (WIN + PLACE) ──────────────────────────────────────
     chart_b64 = ""
     try:
         import matplotlib
@@ -956,18 +977,17 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
         import matplotlib.pyplot as plt
 
         fig, ax = plt.subplots(figsize=(10, 3.5))
-        x = list(range(len(daily)))
-        y = daily["cum_pnl"].tolist()
-        ax.plot(x, y, color="#1565c0", linewidth=2.5, zorder=3, label="WIN")
-        ax.fill_between(x, y, 0,
-                        where=[v >= 0 for v in y], alpha=0.12, color="#2e7d32")
-        ax.fill_between(x, y, 0,
-                        where=[v < 0 for v in y], alpha=0.12, color="#c62828")
+        x = list(range(len(daily_win)))
+        y_win   = daily_win["cum_pnl"].tolist()
+        y_place = daily_place["cum_pnl"].tolist()
+
+        ax.plot(x, y_win,   color="#1565c0", linewidth=2.5, zorder=3, label="WIN")
+        ax.plot(x, y_place, color="#e65100", linewidth=2.5, zorder=3, label="PLACÉ")
         ax.axhline(0, color="#aaa", linewidth=0.8, linestyle="--")
         ax.set_xticks(x)
-        ax.set_xticklabels(daily["date_label"].tolist(), rotation=30, ha="right", fontsize=9)
+        ax.set_xticklabels(daily_win["date_label"].tolist(), rotation=30, ha="right", fontsize=9)
         ax.set_ylabel("P&L cumulé (€)", fontsize=10)
-        ax.set_title("P&L cumulé — stratégie WIN · LightGBM",
+        ax.set_title("P&L cumulé — WIN vs PLACÉ · LightGBM",
                      fontsize=12, fontweight="bold")
         ax.legend(fontsize=9, loc="upper left")
         ax.grid(axis="y", alpha=0.3)
@@ -987,29 +1007,30 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
         if chart_b64 else ""
     )
 
-    # ── Daily rows ───────────────────────────────────────────────────────────
+    # ── Daily rows (WIN + PLACE side by side) ────────────────────────────────
     def _pnl_style(v: float) -> str:
         color = "#2e7d32" if v >= 0 else "#c62828"
         return f'style="color:{color};font-weight:700"'
 
     rows_html = ""
-    for _, r in daily.iterrows():
-        pnl_s = f"{r['pnl']:+.1f}"
-        cum_s = f"{r['cum_pnl']:+.1f}"
-        roi_s = f"{r['roi']:+.0%}"
-        hit_s = f"{r['n_won']}/{int(r['n_bets'])}"
+    for i in range(len(daily_win)):
+        rw = daily_win.iloc[i]
+        rp = daily_place.iloc[i]
         rows_html += f"""
         <tr>
-          <td>{r['date_label']}</td>
-          <td>{int(r['n_bets'])}</td>
-          <td>{hit_s}</td>
-          <td {_pnl_style(r['pnl'])}>{pnl_s} €</td>
-          <td {_pnl_style(r['roi'])}>{roi_s}</td>
-          <td {_pnl_style(r['cum_pnl'])}>{cum_s} €</td>
+          <td>{rw['date_label']}</td>
+          <td>{int(rw['n_bets'])}</td>
+          <td {_pnl_style(rw['pnl'])}>{rw['pnl']:+.1f} €</td>
+          <td {_pnl_style(rw['cum_pnl'])}>{rw['cum_pnl']:+.1f} €</td>
+          <td>{int(rp['n_bets'])}</td>
+          <td {_pnl_style(rp['pnl'])}>{rp['pnl']:+.1f} €</td>
+          <td {_pnl_style(rp['cum_pnl'])}>{rp['cum_pnl']:+.1f} €</td>
         </tr>"""
 
-    pnl_class = "pos" if total_pnl >= 0 else "neg"
-    roi_class = "pos" if total_roi >= 0 else "neg"
+    win_pnl_class   = "pos" if win_pnl >= 0 else "neg"
+    win_roi_class   = "pos" if win_roi >= 0 else "neg"
+    place_pnl_class = "pos" if place_pnl >= 0 else "neg"
+    place_roi_class = "pos" if place_roi >= 0 else "neg"
 
     html = f"""<!DOCTYPE html>
 <html lang="fr">
@@ -1037,26 +1058,26 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
            box-shadow: 0 1px 4px rgba(0,0,0,.10); }}
   th {{ background: #1a1a2e; color: #fff; padding: 10px 14px;
         text-align: left; font-size: 12px; font-weight: 600; }}
+  th.win-col {{ background: #1565c0; }}
+  th.place-col {{ background: #e65100; }}
   td {{ padding: 9px 14px; border-top: 1px solid #eef0f4; font-size: 13px; }}
   tr:hover td {{ background: #f8f9fb; }}
   .section-title {{ font-size: 16px; font-weight: 700; margin: 24px 0 10px; }}
-  .breakdown {{ display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }}
-  .bk-card {{ background:#fff; border-radius:8px; padding:14px 20px;
-              box-shadow:0 1px 3px rgba(0,0,0,.08); flex:1; min-width:200px; }}
-  .bk-card h3 {{ font-size:13px; color:#666; margin-bottom:8px; }}
-  .bk-row {{ display:flex; justify-content:space-between; font-size:13px; margin-top:4px; }}
   .footer {{ margin-top: 28px; font-size: 11px; color: #aaa; text-align: center; }}
 </style>
 </head>
 <body>
 <h1>Performance — Stratégie Hybride</h1>
-<p class="subtitle">WIN · LightGBM &nbsp;|&nbsp; Généré le {generated_at}</p>
+<p class="subtitle">WIN vs PLACÉ · LightGBM &nbsp;|&nbsp; Généré le {generated_at}</p>
 
 <div class="cards">
-  <div class="card"><div class="val {pnl_class}">{total_pnl:+.1f} €</div><div class="lbl">P&amp;L cumulé</div></div>
-  <div class="card"><div class="val {roi_class}">{total_roi:+.0%}</div><div class="lbl">ROI global</div></div>
-  <div class="card"><div class="val">{total_bets}</div><div class="lbl">Paris résolus</div></div>
-  <div class="card"><div class="val">{len(daily)}</div><div class="lbl">Jours actifs</div></div>
+  <div class="card"><div class="val {win_pnl_class}">{win_pnl:+.1f} €</div><div class="lbl">P&amp;L WIN</div></div>
+  <div class="card"><div class="val {win_roi_class}">{win_roi:+.0%}</div><div class="lbl">ROI WIN</div></div>
+  <div class="card"><div class="val">{win_n}</div><div class="lbl">Paris WIN</div></div>
+  <div class="card"><div class="val {place_pnl_class}">{place_pnl:+.1f} €</div><div class="lbl">P&amp;L PLACÉ</div></div>
+  <div class="card"><div class="val {place_roi_class}">{place_roi:+.0%}</div><div class="lbl">ROI PLACÉ</div></div>
+  <div class="card"><div class="val">{place_n}</div><div class="lbl">Paris PLACÉ</div></div>
+  <div class="card"><div class="val">{len(daily_win)}</div><div class="lbl">Jours actifs</div></div>
 </div>
 
 <div class="chart-wrap">{chart_html}</div>
@@ -1064,8 +1085,13 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
 <div class="section-title">Détail par jour</div>
 <table>
   <thead><tr>
-    <th>Date</th><th>Paris</th><th>Gagnés</th>
-    <th>P&amp;L</th><th>ROI</th><th>P&amp;L cumulé</th>
+    <th rowspan="2">Date</th>
+    <th colspan="3" class="win-col" style="text-align:center">WIN</th>
+    <th colspan="3" class="place-col" style="text-align:center">PLACÉ</th>
+  </tr>
+  <tr>
+    <th class="win-col">Paris</th><th class="win-col">P&amp;L</th><th class="win-col">Cumulé</th>
+    <th class="place-col">Paris</th><th class="place-col">P&amp;L</th><th class="place-col">Cumulé</th>
   </tr></thead>
   <tbody>{rows_html}</tbody>
 </table>
