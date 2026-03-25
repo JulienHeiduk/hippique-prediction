@@ -427,11 +427,17 @@ def export_bets_html(
     total_pnl    = sum((b.get("pnl")   or 0) * _bet_scale(b) for b in resolved)
     roi = total_pnl / total_stake if total_stake > 0 else None
 
+    # Split P&L by bet type
+    win_resolved  = [b for b in resolved if b.get("bet_type") == "win"]
+    place_resolved = [b for b in resolved if b.get("bet_type") == "place"]
+    win_pnl   = sum((b.get("pnl") or 0) * _bet_scale(b) for b in win_resolved)
+    place_pnl = sum((b.get("pnl") or 0) * _bet_scale(b) for b in place_resolved)
+
     def _card(val: str, lbl: str, val_class: str = "") -> str:
         return _SUMMARY_CARD.format(val=val, lbl=lbl, val_class=val_class)
 
-    pnl_class = "val-pos" if total_pnl >= 0 else "val-neg"
-    roi_class = "val-pos" if (roi or 0) >= 0 else "val-neg"
+    win_pnl_class   = "val-pos" if win_pnl >= 0 else "val-neg"
+    place_pnl_class = "val-pos" if place_pnl >= 0 else "val-neg"
 
     summary_html = ""
     if n_total:
@@ -440,10 +446,10 @@ def export_bets_html(
             _card(f"{n_won}/{n_won+n_lost}" if (n_won + n_lost) else "0/0", "gagnés"),
             _card(str(n_pending), "en attente"),
         ]
-        if n_won + n_lost > 0:
-            cards.append(_card(f"{total_pnl:+.1f} €", "gain du jour", pnl_class))
-        if roi is not None:
-            cards.append(_card(f"{roi:+.0%}", "ROI", roi_class))
+        if win_resolved:
+            cards.append(_card(f"{win_pnl:+.1f} €", "gain WIN", win_pnl_class))
+        if place_resolved:
+            cards.append(_card(f"{place_pnl:+.1f} €", "gain Placé", place_pnl_class))
         summary_html = '<div class="summary">' + "".join(cards) + "</div>"
 
     # ── 6. Group bets by race ───────────────────────────────────────────────
