@@ -29,7 +29,8 @@
       "Bash(cmd //c \"taskkill /PID 48848 /F\" 2>&1; sleep 2)",
       "Bash(.venv/Scripts/python.exe -c \":*)",
       "Bash(cmd //c \"taskkill /PID 30700 /F\")",
-      "Bash(ls logs/*.log)"
+      "Bash(ls logs/*.log)",
+      "Bash(find C:UsersjulieOneDriveBureauhippique-predictiondatareports -type f -name *.html -o -name *.json)"
     ]
   }
 }
