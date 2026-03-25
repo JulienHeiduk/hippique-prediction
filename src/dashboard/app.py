@@ -66,8 +66,8 @@ with st.sidebar:
     stats = _get_sidebar_stats()
     if stats:
         col_w, col_p = st.columns(2)
-        col_w.metric("P&L WIN", f"{stats['win_pnl_total']:+.1f} €")
-        col_p.metric("P&L Placé", f"{stats['place_pnl_total']:+.1f} €")
+        col_w.metric("P&L WIN", f"{stats.get('win_pnl_total', 0):+.1f} €")
+        col_p.metric("P&L Placé", f"{stats.get('place_pnl_total', 0):+.1f} €")
     st.divider()
     st.caption("Paper trading uniquement — Trot PMU")
 
