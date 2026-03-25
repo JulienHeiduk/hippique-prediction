@@ -139,14 +139,14 @@ def run_morning_session(date: str | None = None) -> None:
             except Exception as exc:
                 logger.warning("LightGBM training failed: {} — skipping", exc)
 
-        # WIN + PLACE bets: LightGBM
+        # WIN bets (+ mirror PLACE): LightGBM
         bets_all = []
         if lgbm_model is not None:
             lgbm_scorer = lambda df, m=lgbm_model: score_lgbm(df, m)
             bets_all = generate_bets(
                 conn, date,
                 scorer_fn=lgbm_scorer, model_source="lgbm",
-                bet_types=["win", "place"], min_race_time=now, ev_threshold=WIN_EV_THRESHOLD,
+                bet_types=["win"], min_race_time=now, ev_threshold=WIN_EV_THRESHOLD,
             )
 
         n_win = sum(1 for b in bets_all if isinstance(b, dict) and b.get("bet_type") == "win")
@@ -196,7 +196,7 @@ def run_hourly_update(date: str | None = None) -> None:
             bets_all = generate_bets(
                 conn, date,
                 scorer_fn=lgbm_scorer, model_source="lgbm",
-                bet_types=["win", "place"], min_race_time=now, ev_threshold=WIN_EV_THRESHOLD,
+                bet_types=["win"], min_race_time=now, ev_threshold=WIN_EV_THRESHOLD,
             )
 
         n_win = sum(1 for b in bets_all if isinstance(b, dict) and b.get("bet_type") == "win")

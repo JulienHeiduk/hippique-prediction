@@ -82,7 +82,7 @@ def generate_bets(
         scorer_fn = lambda df, m=_model: score_lgbm(df, m)
 
     if bet_types is None:
-        bet_types = ["win", "place"]
+        bet_types = ["win"]
 
     df = compute_today_features(conn, date)
 
@@ -210,74 +210,28 @@ def generate_bets(
                     }
                     upsert_bet(conn, bet)
                     bets.append(bet)
+
+                    # Mirror place bet: same horse, no extra EV filter
+                    bet_id_place = f"{race_id}_place{_sfx}"
+                    existing_place = existing_map.get(bet_id_place, {})
+                    if existing_place.get("status") not in ("won", "lost"):
+                        place_bet = {
+                            **bet,
+                            "bet_id": bet_id_place,
+                            "bet_type": "place",
+                            "created_at": existing_place.get("created_at") or now,
+                        }
+                        upsert_bet(conn, place_bet)
+                        bets.append(place_bet)
+                    else:
+                        bets.append(existing_place)
+
                 logger.info(
-                    "BET win | {} | {} | model_prob={:.2%} implied={:.2%} EV={:.2f}",
+                    "BET win+place | {} | {} | model_prob={:.2%} implied={:.2%} EV={:.2f}",
                     race_id, top1.get("horse_name"), model_prob_top1,
                     implied_prob_top1, ev_ratio,
                 )
 
-        # --- 'place' bet: mirror the win selection ---
-        if "place" in bet_types:
-            top1 = race_df.iloc[0]
-
-            final_implied_top1   = top1.get("final_implied_prob_norm")
-            morning_implied_top1 = top1.get("morning_implied_prob_norm")
-            if final_implied_top1 is not None and not pd.isna(final_implied_top1):
-                implied_prob_top1 = float(final_implied_top1)
-            elif morning_implied_top1 is not None and not pd.isna(morning_implied_top1):
-                implied_prob_top1 = float(morning_implied_top1)
-            else:
-                implied_prob_top1 = 1.0 / field_size
-
-            model_prob_top1 = float(top1["model_prob"])
-            ev_ratio = model_prob_top1 / implied_prob_top1 if implied_prob_top1 > 0 else 0.0
-
-            if model_prob_top1 > implied_prob_top1 * ev_threshold:
-                bet_id_place = f"{race_id}_place{_sfx}"
-                existing_place = existing_map.get(bet_id_place, {})
-
-                if existing_place.get("status") in ("won", "lost"):
-                    bets.append(existing_place)
-                else:
-                    final_odds_top1   = top1.get("final_odds")
-                    morning_odds_top1 = top1.get("morning_odds")
-                    morning_odds_val  = (
-                        float(final_odds_top1)   if final_odds_top1   is not None and not pd.isna(final_odds_top1)   else
-                        float(morning_odds_top1) if morning_odds_top1 is not None and not pd.isna(morning_odds_top1) else
-                        None
-                    )
-                    if morning_odds_val is None and existing_place.get("morning_odds") is not None:
-                        morning_odds_val = existing_place["morning_odds"]
-                    ks = kelly_stake(model_prob_top1, morning_odds_val or field_size)
-                    bet = {
-                        "bet_id": bet_id_place,
-                        "race_id": str(race_id),
-                        "date": date,
-                        "hippodrome": hippodrome,
-                        "bet_type": "place",
-                        "runner_id_1": str(top1["runner_id"]),
-                        "runner_id_2": None,
-                        "horse_name_1": top1.get("horse_name"),
-                        "horse_name_2": None,
-                        "morning_odds": morning_odds_val,
-                        "model_prob": model_prob_top1,
-                        "implied_prob": float(implied_prob_top1),
-                        "ev_ratio": ev_ratio,
-                        "kelly_stake": ks,
-                        "stake": UNIT_STAKE,
-                        "status": "pending",
-                        "pnl": None,
-                        "created_at": existing_place.get("created_at") or now,
-                        "resolved_at": None,
-                        "model_source": model_source,
-                    }
-                    upsert_bet(conn, bet)
-                    bets.append(bet)
-                logger.info(
-                    "BET place | {} | {} | model_prob={:.2%} implied={:.2%} EV={:.2f}",
-                    race_id, top1.get("horse_name"), model_prob_top1,
-                    implied_prob_top1, ev_ratio,
-                )
 
 
     # ── Refresh odds for pending bets not regenerated in this run ──────────
