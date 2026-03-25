@@ -152,7 +152,8 @@ with tab_perf:
             "place_cum_pnl": "P&L cumulé Placé (€)",
         })
         st.line_chart(daily_df[["P&L cumulé WIN (€)", "P&L cumulé Placé (€)"]])
-        st.caption(f"P&L cumulé WIN & Placé · LightGBM — {perf_stats['n_total']} paris résolus")
+        n_resolved = perf_stats.get('win_n', 0) + perf_stats.get('place_n', 0)
+        st.caption(f"P&L cumulé WIN & Placé · LightGBM — {n_resolved} paris résolus")
     else:
         st.info("Aucune donnée de performance disponible.")
 
