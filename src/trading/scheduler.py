@@ -276,19 +276,27 @@ def start_scheduler() -> None:
     scheduler = BlockingScheduler()
 
     # LightGBM retraining at 08:00 (30 min before morning session)
-    scheduler.add_job(run_retrain_model, "cron", hour=8, minute=0)
+    # misfire_grace_time=3600s: run on restart if missed by less than 1 hour
+    scheduler.add_job(run_retrain_model, "cron", hour=8, minute=0, misfire_grace_time=3600)
 
     # Morning: single run at 08:30 (odds not yet stable before that)
-    scheduler.add_job(run_morning_session, "cron", hour=8, minute=30)
+    # misfire_grace_time=3600s: run on restart if missed by less than 1 hour
+    scheduler.add_job(run_morning_session, "cron", hour=8, minute=30, misfire_grace_time=3600)
 
-    # 30-min refresh from 10:00 to 22:30 inclusive (26 runs)
-    scheduler.add_job(run_hourly_update, "cron", hour="10-22", minute="0,30")
+    # 30-min refresh from 10:00 to 22:00 inclusive (25 runs)
+    # Stop at 22:00 — the 22:30 slot is handled by run_evening_session
+    # coalesce=True: if multiple slots were missed, run only once on restart
+    scheduler.add_job(run_hourly_update, "cron", hour="10-21", minute="0,30",
+                      misfire_grace_time=1800, coalesce=True)
+    scheduler.add_job(run_hourly_update, "cron", hour="22", minute="0",
+                      misfire_grace_time=1800, coalesce=True)
 
     # Evening resolution at 22:30 (results published ~22:00)
-    scheduler.add_job(run_evening_session, "cron", hour=22, minute=30)
+    # misfire_grace_time=3600s: run on restart if missed by less than 1 hour
+    scheduler.add_job(run_evening_session, "cron", hour=22, minute=30, misfire_grace_time=3600)
 
     logger.info(
-        "Scheduler starting — 08:30 morning / 10:00–22:30 every 30min / 22:30 evening"
+        "Scheduler starting — 08:30 morning / 10:00–22:00 every 30min / 22:30 evening"
     )
     try:
         scheduler.start()

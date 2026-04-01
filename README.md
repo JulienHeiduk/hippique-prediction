@@ -1,7 +1,7 @@
 # Hippique Prediction — PMU Trot Paper Trading
 
-Système de prédiction et de paper trading pour les courses de trot PMU (Attelé & Monté).
-Voir `FORMULA_TROT.md` pour le détail complet du modèle de sélection.
+Prediction and paper trading system for PMU trot races (Attelé & Monté).
+See `FORMULA_TROT.md` for the full selection model breakdown.
 
 ---
 
@@ -14,28 +14,39 @@ python -m venv .venv
 
 ---
 
-## Dashboard
+## Architecture
 
-```bash
-streamlit run src/dashboard/app.py
+```
+scraper/   →   features/   →   model/   →   trading/   →   dashboard/
+  PMU API       form_score      LightGBM     kelly_stake    Streamlit
+  DuckDB        odds_features   Ranker       generate_bets  viewer HTML
+                jockey_win_rate backtest     resolve_bets
 ```
 
-Ouvre le viewer dans le navigateur. Utiliser le sélecteur de date dans la barre latérale
-pour naviguer entre les fiches HTML des jours disponibles.
+The project is organized into 5 modules:
+
+| Module | Description |
+|---|---|
+| `src/scraper/` | PMU API client, parsing, DuckDB storage (5 tables incl. `bets`) |
+| `src/features/` | Feature engineering: form, odds, jockey win rate (leakage-free) |
+| `src/model/` | Scoring (baseline, form, market, combined, LightGBM ranker), backtest |
+| `src/trading/` | Kelly stake, bet generation/resolution, APScheduler |
+| `src/dashboard/` | Streamlit viewer for daily HTML bet sheets and performance report |
+| `config/settings.py` | Paths, PMU API URLs, trading constants |
 
 ---
 
-## Scheduler automatique
+## Scheduler
 
-Le scheduler tourne en arrière-plan et gère toute la journée sans intervention :
+The scheduler runs in the background and handles the full day automatically:
 
-| Heure | Action |
+| Time | Action |
 |---|---|
-| 08:30 | Scraping programme + génération des paris + HTML → push GitHub |
-| 10:00 – 22:00 (toutes les heures) | Re-scraping cotes + refresh des paris + HTML → push GitHub |
-| 22:30 | Scraping résultats + résolution des paris + HTML P&L → push GitHub |
+| 08:30 | Scrape program + generate bets + HTML → push to GitHub |
+| 10:00 – 22:00 (hourly) | Re-scrape odds + refresh bets + HTML → push to GitHub |
+| 22:30 | Scrape results + resolve bets + HTML P&L → push to GitHub |
 
-Démarrage manuel (terminal bloquant) :
+Manual start (blocking terminal):
 
 ```bash
 .venv\Scripts\python.exe -c "
@@ -44,59 +55,87 @@ start_scheduler()
 "
 ```
 
-Ou double-cliquer sur **`run_scheduler.bat`** à la racine du projet.
+Or double-click **`run_scheduler.bat`** at the project root.
 
 ---
 
-## Démarrage automatique sur Windows
+## Dashboard
 
-### 1. Configurer git push sans mot de passe
+```bash
+.venv\Scripts\python.exe -m streamlit run src/dashboard/app.py
+```
 
-Le scheduler pousse le fichier HTML sur GitHub après chaque mise à jour. Git doit
-s'authentifier seul via le Gestionnaire d'informations d'identification Windows.
+Opens the viewer in the browser. Use the date selector in the sidebar to browse available daily HTML bet sheets.
 
-1. Sur GitHub : **Settings → Developer settings → Personal access tokens → Tokens (classic)**
-   → **Generate new token** → cocher `repo` → copier le token (`ghp_xxxx…`)
+---
 
-2. Dans un terminal, une seule fois :
+## Tests
+
+```bash
+.venv\Scripts\python.exe -m pytest tests/ -v
+```
+
+4 test files: scraper, features, backtest, trading.
+
+---
+
+## Auto-start on Windows
+
+### 1. Configure passwordless git push
+
+The scheduler pushes HTML files to GitHub after each update. Git must authenticate silently via the Windows Credential Manager.
+
+1. On GitHub: **Settings → Developer settings → Personal access tokens → Tokens (classic)**
+   → **Generate new token** → check `repo` → copy the token
+2. In a terminal, once:
 
 ```bash
 git config --global credential.helper manager
-git push   # → entrer login GitHub + token comme mot de passe
+git push   # → enter GitHub username + token as password
 ```
 
-Les prochains `git push` (y compris ceux du scheduler) seront silencieux.
+Subsequent `git push` calls (including from the scheduler) will be silent.
 
-### 2. Planificateur de tâches Windows
+### 2. Windows Task Scheduler
 
-1. Ouvrir **Planificateur de tâches** (`taskschd.msc`)
-2. **Créer une tâche de base…**
-   - **Déclencheur** : *Au démarrage de l'ordinateur* (ou *À l'ouverture de session*)
-   - **Action** : *Démarrer un programme* → sélectionner `run_scheduler.bat`
-   - **Démarrer dans** : `C:\Users\julie\OneDrive\Bureau\hippique-prediction`
-3. Cliquer **OK** → clic droit sur la tâche → **Exécuter** pour tester immédiatement.
+1. Open **Task Scheduler** (`taskschd.msc`)
+2. **Create Basic Task…**
+   - **Trigger**: *At computer startup* (or *At log on*)
+   - **Action**: *Start a program* → select `run_scheduler.bat`
+   - **Start in**: project directory path
+3. Click **OK** → right-click the task → **Run** to test immediately.
 
 ---
 
-## Constantes configurables
+## Configuration
 
-Fichier : `config/settings.py`
+File: `config/settings.py`
 
-| Constante | Valeur par défaut | Rôle |
+| Constant | Default | Purpose |
 |---|---|---|
-| `EV_THRESHOLD` | `1.0` | Seuil minimum d'EV pour parier |
-| `KELLY_FRACTION` | `0.25` | Fraction Kelly (mise conservative) |
-| `UNIT_STAKE` | `2.0 €` | Mise de base par pari |
+| `EV_THRESHOLD` | `1.0` | Minimum EV threshold to place a bet |
+| `WIN_EV_THRESHOLD` | `1.0` | EV threshold for WIN bets (LightGBM) |
+| `KELLY_FRACTION` | `0.25` | Kelly fraction (conservative sizing) |
+| `UNIT_STAKE` | `20.0 €` | Base stake per bet |
 
 ---
 
-## Architecture
+## Notebooks
 
-```
-scraper/   →   features/   →   model/   →   trading/   →   dashboard/
-  PMU API       form_score      M4 Combined   kelly_stake    Streamlit
-  DuckDB        odds_features   score_combined generate_bets  viewer
-                jockey_win_rate backtest       resolve_bets
-```
+| Notebook | Content |
+|---|---|
+| `01_data_overview.ipynb` | PMU data exploration |
+| `02_backtest.ipynb` | Rule-based model backtest (7 sections) |
+| `03_live_trading.ipynb` | Live paper trading (schedule, picks, ledger) |
+| `04_lgbm.ipynb` | LightGBM Ranker training |
+| `05_kaggle_dataset.ipynb` | Kaggle dataset export |
+| `06_eda.ipynb` | Exploratory data analysis |
 
-Voir `FORMULA_TROT.md` pour l'explication complète du modèle.
+---
+
+## Data
+
+- `data/raw/` — Raw PMU JSON files by date
+- `data/processed/hippique.duckdb` — DuckDB database (reunions, races, runners, bets)
+- `data/models/` — LightGBM model (`lgbm_ranker.txt`) + medians + weights
+- `data/reports/` — Daily HTML bet sheets, performance report, stats
