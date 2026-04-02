@@ -145,6 +145,8 @@ with tab_perf:
     if perf_stats and perf_stats.get("daily"):
         import pandas as pd
         daily_df = pd.DataFrame(perf_stats["daily"])
+        daily_df["date"] = pd.to_datetime(daily_df["date"], format="%d/%m/%Y")
+        daily_df = daily_df.sort_values("date")
         daily_df = daily_df.set_index("date")
         daily_df.index.name = "Jour"
         daily_df = daily_df.rename(columns={
