@@ -67,6 +67,8 @@ Or double-click **`run_scheduler.bat`** at the project root.
 
 Opens the viewer in the browser. Use the date selector in the sidebar to browse available daily HTML bet sheets.
 
+![Dashboard](screenshots/dashboard.jpg)
+
 ---
 
 ## Tests
