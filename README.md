@@ -61,6 +61,8 @@ Or double-click **`run_scheduler.bat`** at the project root.
 
 ## Dashboard
 
+Live dashboard: **https://horses-races-predictions.streamlit.app/**
+
 ```bash
 .venv\Scripts\python.exe -m streamlit run src/dashboard/app.py
 ```
