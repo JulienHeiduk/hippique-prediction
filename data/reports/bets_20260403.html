@@ -190,6 +190,19 @@
   }
   .odds-ok      { background: rgba(46,125,50,.25);  color: #a5d6a7; }
   .odds-missing { background: rgba(230,81,0,.30);   color: #ffcc80; }
+  /* ── Discipline tag ── */
+  .disc-tag {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+  .disc-plat   { background: #2563eb; color: #fff; }
+  .disc-trot   { background: #7c3aed; color: #fff; }
+  .disc-attele { background: #7c3aed; color: #fff; }
   /* ── Stake / P&L column ── */
   .stake-col {
     text-align: right;
@@ -229,107 +242,56 @@
 </head>
 <body>
 <h1>Paris du jour — 03/04/2026</h1>
-<p class="subtitle">Généré le 03/04/2026 22:30</p>
-<div class="summary"><div class="summary-card"><div class="val ">20</div><div class="lbl">paris total</div></div><div class="summary-card"><div class="val ">8/20</div><div class="lbl">gagnés</div></div><div class="summary-card"><div class="val ">0</div><div class="lbl">en attente</div></div><div class="summary-card"><div class="val val-neg">-162.0 €</div><div class="lbl">gain WIN</div></div><div class="summary-card"><div class="val val-pos">+66.0 €</div><div class="lbl">gain Placé</div></div></div>
+<p class="subtitle">Généré le 04/04/2026 18:54</p>
+<div class="summary"><div class="summary-card"><div class="val ">12</div><div class="lbl">paris total</div></div><div class="summary-card"><div class="val ">0/0</div><div class="lbl">gagnés</div></div><div class="summary-card"><div class="val ">12</div><div class="lbl">en attente</div></div></div>
 <div class="race-block">
   <div class="race-header">
     <span class="race-ref">LA CEPIERE · R3·C3</span>
+    <span class="disc-tag disc-attele">Attelé</span>
     <span class="race-meta">
       <span>12:51</span><span>2750 m</span><span>8 partants</span>
     </span>
     <span class="odds-tag odds-ok">✓ Cotes complètes</span>
     <a class="pmu-link" href="https://www.pmu.fr/turf/03042026/R3/C3/" target="_blank">↗ pmu.fr</a>
   </div>
-    <div class="bet-row row-won">
+    <div class="bet-row ">
     <div>
-      <span class="status-badge status-won">✓ Gagné</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
       <span class="model-badge model-lgbm">LightGBM</span>
     </div>
     <div>
-      <div class="horse-line"><span class="horse-num">#3</span>NAGRADO GOLD</div>
+      <div class="horse-line"><span class="horse-num">#2</span>NOBLE DE SOURCE</div>
       <div class="bet-stats">
-        <span>Cote : <strong>6.20</strong></span>
-        <span>Modèle : <strong>25%</strong></span>
-        <span>Marché : <strong>22%</strong></span>
-        <span class="ev ev-mid">EV 1.14</span>
+        <span>Cote : <strong>4.80</strong></span>
+        <span>Modèle : <strong>31%</strong></span>
+        <span>Marché : <strong>18%</strong></span>
+        <span class="ev ev-high">EV 1.71</span>
       </div>
-      <div class="result-line"><span class="finish-pos">Arrivé 2e</span> · Vainqueur : <span class="winner-name">NOBLE DE SOURCE</span></div>
+      
     </div>
     <div class="stake-col">
-      <div class="pnl-pos">+14.0 €</div>
-      <div class="stake-label">gain net</div>
+      <div class="stake-amount">20 €</div>
+      <div class="stake-label">mise</div>
     </div>
   </div>
-  <div class="bet-row row-lost">
+  <div class="bet-row ">
     <div>
-      <span class="status-badge status-lost">✗ Perdu</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
       <span class="model-badge model-lgbm">LightGBM</span>
     </div>
     <div>
-      <div class="horse-line"><span class="horse-num">#3</span>NAGRADO GOLD</div>
+      <div class="horse-line"><span class="horse-num">#2</span>NOBLE DE SOURCE</div>
       <div class="bet-stats">
-        <span>Cote : <strong>6.20</strong></span>
-        <span>Modèle : <strong>25%</strong></span>
-        <span>Marché : <strong>22%</strong></span>
-        <span class="ev ev-mid">EV 1.14</span>
+        <span>Cote : <strong>4.80</strong></span>
+        <span>Modèle : <strong>31%</strong></span>
+        <span>Marché : <strong>18%</strong></span>
+        <span class="ev ev-high">EV 1.71</span>
       </div>
-      <div class="result-line"><span class="finish-pos">Arrivé 2e</span> · Vainqueur : <span class="winner-name">NOBLE DE SOURCE</span></div>
+      
     </div>
     <div class="stake-col">
-      <div class="pnl-neg">-20.0 €</div>
-      <div class="stake-label">perte</div>
-    </div>
-  </div>
-
-</div>
-
-<div class="race-block">
-  <div class="race-header">
-    <span class="race-ref">LA CEPIERE · R3·C5</span>
-    <span class="race-meta">
-      <span>13:53</span><span>2950 m</span><span>9 partants</span>
-    </span>
-    <span class="odds-tag odds-ok">✓ Cotes complètes</span>
-    <a class="pmu-link" href="https://www.pmu.fr/turf/03042026/R3/C5/" target="_blank">↗ pmu.fr</a>
-  </div>
-    <div class="bet-row row-lost">
-    <div>
-      <span class="status-badge status-lost">✗ Perdu</span>
-      <span class="model-badge model-lgbm">LightGBM</span>
-    </div>
-    <div>
-      <div class="horse-line"><span class="horse-num">#8</span>MAGICAL</div>
-      <div class="bet-stats">
-        <span>Cote : <strong>7.70</strong></span>
-        <span>Modèle : <strong>28%</strong></span>
-        <span>Marché : <strong>17%</strong></span>
-        <span class="ev ev-high">EV 1.58</span>
-      </div>
-      <div class="result-line">Vainqueur : <span class="winner-name">MIKADO PIEMONT</span></div>
-    </div>
-    <div class="stake-col">
-      <div class="pnl-neg">-20.0 €</div>
-      <div class="stake-label">perte</div>
-    </div>
-  </div>
-  <div class="bet-row row-lost">
-    <div>
-      <span class="status-badge status-lost">✗ Perdu</span>
-      <span class="model-badge model-lgbm">LightGBM</span>
-    </div>
-    <div>
-      <div class="horse-line"><span class="horse-num">#8</span>MAGICAL</div>
-      <div class="bet-stats">
-        <span>Cote : <strong>7.70</strong></span>
-        <span>Modèle : <strong>28%</strong></span>
-        <span>Marché : <strong>17%</strong></span>
-        <span class="ev ev-high">EV 1.58</span>
-      </div>
-      <div class="result-line">Vainqueur : <span class="winner-name">MIKADO PIEMONT</span></div>
-    </div>
-    <div class="stake-col">
-      <div class="pnl-neg">-20.0 €</div>
-      <div class="stake-label">perte</div>
+      <div class="stake-amount">20 €</div>
+      <div class="stake-label">mise</div>
     </div>
   </div>
 
@@ -338,50 +300,51 @@
 <div class="race-block">
   <div class="race-header">
     <span class="race-ref">VINCENNES · R1·C1</span>
+    <span class="disc-tag disc-trot">Trot Monté</span>
     <span class="race-meta">
       <span>16:03</span><span>2200 m</span><span>11 partants</span>
     </span>
     <span class="odds-tag odds-ok">✓ Cotes complètes</span>
     <a class="pmu-link" href="https://www.pmu.fr/turf/03042026/R1/C1/" target="_blank">↗ pmu.fr</a>
   </div>
-    <div class="bet-row row-lost">
+    <div class="bet-row ">
     <div>
-      <span class="status-badge status-lost">✗ Perdu</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
       <span class="model-badge model-lgbm">LightGBM</span>
     </div>
     <div>
       <div class="horse-line"><span class="horse-num">#5</span>MISS DE BAILLE</div>
       <div class="bet-stats">
         <span>Cote : <strong>4.30</strong></span>
-        <span>Modèle : <strong>20%</strong></span>
-        <span>Marché : <strong>19%</strong></span>
-        <span class="ev ev-mid">EV 1.04</span>
+        <span>Modèle : <strong>21%</strong></span>
+        <span>Marché : <strong>20%</strong></span>
+        <span class="ev ev-mid">EV 1.06</span>
       </div>
-      <div class="result-line">Vainqueur : <span class="winner-name">MIRMANDE DEL PHEDO</span></div>
+      
     </div>
     <div class="stake-col">
-      <div class="pnl-neg">-20.0 €</div>
-      <div class="stake-label">perte</div>
+      <div class="stake-amount">20 €</div>
+      <div class="stake-label">mise</div>
     </div>
   </div>
-  <div class="bet-row row-lost">
+  <div class="bet-row ">
     <div>
-      <span class="status-badge status-lost">✗ Perdu</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
       <span class="model-badge model-lgbm">LightGBM</span>
     </div>
     <div>
       <div class="horse-line"><span class="horse-num">#5</span>MISS DE BAILLE</div>
       <div class="bet-stats">
         <span>Cote : <strong>4.30</strong></span>
-        <span>Modèle : <strong>20%</strong></span>
-        <span>Marché : <strong>19%</strong></span>
-        <span class="ev ev-mid">EV 1.04</span>
+        <span>Modèle : <strong>21%</strong></span>
+        <span>Marché : <strong>20%</strong></span>
+        <span class="ev ev-mid">EV 1.06</span>
       </div>
-      <div class="result-line">Vainqueur : <span class="winner-name">MIRMANDE DEL PHEDO</span></div>
+      
     </div>
     <div class="stake-col">
-      <div class="pnl-neg">-20.0 €</div>
-      <div class="stake-label">perte</div>
+      <div class="stake-amount">20 €</div>
+      <div class="stake-label">mise</div>
     </div>
   </div>
 
@@ -390,102 +353,51 @@
 <div class="race-block">
   <div class="race-header">
     <span class="race-ref">VINCENNES · R1·C3</span>
+    <span class="disc-tag disc-trot">Trot Monté</span>
     <span class="race-meta">
       <span>17:13</span><span>2200 m</span><span>12 partants</span>
     </span>
     <span class="odds-tag odds-ok">✓ Cotes complètes</span>
     <a class="pmu-link" href="https://www.pmu.fr/turf/03042026/R1/C3/" target="_blank">↗ pmu.fr</a>
   </div>
-    <div class="bet-row row-lost">
+    <div class="bet-row ">
     <div>
-      <span class="status-badge status-lost">✗ Perdu</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
       <span class="model-badge model-lgbm">LightGBM</span>
     </div>
     <div>
-      <div class="horse-line"><span class="horse-num">#8</span>LIBERTA DEL PHEDO</div>
-      <div class="bet-stats">
-        <span>Cote : <strong>2.90</strong></span>
-        <span>Modèle : <strong>19%</strong></span>
-        <span>Marché : <strong>18%</strong></span>
-        <span class="ev ev-mid">EV 1.01</span>
-      </div>
-      <div class="result-line">Vainqueur : <span class="winner-name">LYRIC</span></div>
-    </div>
-    <div class="stake-col">
-      <div class="pnl-neg">-20.0 €</div>
-      <div class="stake-label">perte</div>
-    </div>
-  </div>
-  <div class="bet-row row-lost">
-    <div>
-      <span class="status-badge status-lost">✗ Perdu</span>
-      <span class="model-badge model-lgbm">LightGBM</span>
-    </div>
-    <div>
-      <div class="horse-line"><span class="horse-num">#8</span>LIBERTA DEL PHEDO</div>
-      <div class="bet-stats">
-        <span>Cote : <strong>2.90</strong></span>
-        <span>Modèle : <strong>19%</strong></span>
-        <span>Marché : <strong>18%</strong></span>
-        <span class="ev ev-mid">EV 1.01</span>
-      </div>
-      <div class="result-line">Vainqueur : <span class="winner-name">LYRIC</span></div>
-    </div>
-    <div class="stake-col">
-      <div class="pnl-neg">-20.0 €</div>
-      <div class="stake-label">perte</div>
-    </div>
-  </div>
-
-</div>
-
-<div class="race-block">
-  <div class="race-header">
-    <span class="race-ref">VINCENNES · R1·C5</span>
-    <span class="race-meta">
-      <span>18:24</span><span>2700 m</span><span>10 partants</span>
-    </span>
-    <span class="odds-tag odds-ok">✓ Cotes complètes</span>
-    <a class="pmu-link" href="https://www.pmu.fr/turf/03042026/R1/C5/" target="_blank">↗ pmu.fr</a>
-  </div>
-    <div class="bet-row row-won">
-    <div>
-      <span class="status-badge status-won">✓ Gagné</span>
-      <span class="model-badge model-lgbm">LightGBM</span>
-    </div>
-    <div>
-      <div class="horse-line"><span class="horse-num">#7</span>LOOK MESLOIS</div>
+      <div class="horse-line"><span class="horse-num">#10</span>LOUSTIC</div>
       <div class="bet-stats">
         <span>Cote : <strong>4.50</strong></span>
         <span>Modèle : <strong>21%</strong></span>
-        <span>Marché : <strong>16%</strong></span>
-        <span class="ev ev-mid">EV 1.26</span>
+        <span>Marché : <strong>19%</strong></span>
+        <span class="ev ev-mid">EV 1.08</span>
       </div>
-      <div class="result-line"><span class="finish-pos">Arrivé 3e</span> · Vainqueur : <span class="winner-name">LUSANIO DE WARNOC</span></div>
+      
     </div>
     <div class="stake-col">
-      <div class="pnl-pos">+14.0 €</div>
-      <div class="stake-label">gain net</div>
+      <div class="stake-amount">20 €</div>
+      <div class="stake-label">mise</div>
     </div>
   </div>
-  <div class="bet-row row-lost">
+  <div class="bet-row ">
     <div>
-      <span class="status-badge status-lost">✗ Perdu</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
       <span class="model-badge model-lgbm">LightGBM</span>
     </div>
     <div>
-      <div class="horse-line"><span class="horse-num">#7</span>LOOK MESLOIS</div>
+      <div class="horse-line"><span class="horse-num">#10</span>LOUSTIC</div>
       <div class="bet-stats">
         <span>Cote : <strong>4.50</strong></span>
         <span>Modèle : <strong>21%</strong></span>
-        <span>Marché : <strong>16%</strong></span>
-        <span class="ev ev-mid">EV 1.26</span>
+        <span>Marché : <strong>19%</strong></span>
+        <span class="ev ev-mid">EV 1.08</span>
       </div>
-      <div class="result-line"><span class="finish-pos">Arrivé 3e</span> · Vainqueur : <span class="winner-name">LUSANIO DE WARNOC</span></div>
+      
     </div>
     <div class="stake-col">
-      <div class="pnl-neg">-20.0 €</div>
-      <div class="stake-label">perte</div>
+      <div class="stake-amount">20 €</div>
+      <div class="stake-label">mise</div>
     </div>
   </div>
 
@@ -494,50 +406,51 @@
 <div class="race-block">
   <div class="race-header">
     <span class="race-ref">WOLVEGA · R5·C2</span>
+    <span class="disc-tag disc-attele">Attelé</span>
     <span class="race-meta">
       <span>19:50</span><span>2100 m</span><span>9 partants</span>
     </span>
     <span class="odds-tag odds-ok">✓ Cotes complètes</span>
     <a class="pmu-link" href="https://www.pmu.fr/turf/03042026/R5/C2/" target="_blank">↗ pmu.fr</a>
   </div>
-    <div class="bet-row row-won">
+    <div class="bet-row ">
     <div>
-      <span class="status-badge status-won">✓ Gagné</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
       <span class="model-badge model-lgbm">LightGBM</span>
     </div>
     <div>
-      <div class="horse-line"><span class="horse-num">#5</span>MARK SCHERMER</div>
+      <div class="horse-line"><span class="horse-num">#6</span>LIBERTO</div>
       <div class="bet-stats">
-        <span>Cote : <strong>1.90</strong></span>
-        <span>Modèle : <strong>23%</strong></span>
-        <span>Marché : <strong>19%</strong></span>
-        <span class="ev ev-mid">EV 1.22</span>
+        <span>Cote : <strong>8.00</strong></span>
+        <span>Modèle : <strong>19%</strong></span>
+        <span>Marché : <strong>11%</strong></span>
+        <span class="ev ev-high">EV 1.78</span>
       </div>
-      <div class="result-line"><span class="finish-pos">Arrivé 1er</span></div>
+      
     </div>
     <div class="stake-col">
-      <div class="pnl-pos">+6.0 €</div>
-      <div class="stake-label">gain net</div>
+      <div class="stake-amount">20 €</div>
+      <div class="stake-label">mise</div>
     </div>
   </div>
-  <div class="bet-row row-won">
+  <div class="bet-row ">
     <div>
-      <span class="status-badge status-won">✓ Gagné</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
       <span class="model-badge model-lgbm">LightGBM</span>
     </div>
     <div>
-      <div class="horse-line"><span class="horse-num">#5</span>MARK SCHERMER</div>
+      <div class="horse-line"><span class="horse-num">#6</span>LIBERTO</div>
       <div class="bet-stats">
-        <span>Cote : <strong>1.90</strong></span>
-        <span>Modèle : <strong>23%</strong></span>
-        <span>Marché : <strong>19%</strong></span>
-        <span class="ev ev-mid">EV 1.22</span>
+        <span>Cote : <strong>8.00</strong></span>
+        <span>Modèle : <strong>19%</strong></span>
+        <span>Marché : <strong>11%</strong></span>
+        <span class="ev ev-high">EV 1.78</span>
       </div>
-      <div class="result-line"><span class="finish-pos">Arrivé 1er</span></div>
+      
     </div>
     <div class="stake-col">
-      <div class="pnl-pos">+18.0 €</div>
-      <div class="stake-label">gain net</div>
+      <div class="stake-amount">20 €</div>
+      <div class="stake-label">mise</div>
     </div>
   </div>
 
@@ -546,102 +459,51 @@
 <div class="race-block">
   <div class="race-header">
     <span class="race-ref">WOLVEGA · R5·C3</span>
+    <span class="disc-tag disc-attele">Attelé</span>
     <span class="race-meta">
       <span>20:35</span><span>2600 m</span><span>8 partants</span>
     </span>
     <span class="odds-tag odds-ok">✓ Cotes complètes</span>
     <a class="pmu-link" href="https://www.pmu.fr/turf/03042026/R5/C3/" target="_blank">↗ pmu.fr</a>
   </div>
-    <div class="bet-row row-won">
+    <div class="bet-row ">
     <div>
-      <span class="status-badge status-won">✓ Gagné</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
       <span class="model-badge model-lgbm">LightGBM</span>
     </div>
     <div>
-      <div class="horse-line"><span class="horse-num">#1</span>UTKIEKER</div>
+      <div class="horse-line"><span class="horse-num">#3</span>OVIEDO BASE</div>
       <div class="bet-stats">
-        <span>Cote : <strong>5.40</strong></span>
-        <span>Modèle : <strong>19%</strong></span>
-        <span>Marché : <strong>7%</strong></span>
-        <span class="ev ev-high">EV 2.83</span>
+        <span>Cote : <strong>4.00</strong></span>
+        <span>Modèle : <strong>22%</strong></span>
+        <span>Marché : <strong>22%</strong></span>
+        <span class="ev ev-mid">EV 1.01</span>
       </div>
-      <div class="result-line"><span class="finish-pos">Arrivé 2e</span> · Vainqueur : <span class="winner-name">GREAT OF MADRIK</span></div>
+      
     </div>
     <div class="stake-col">
-      <div class="pnl-pos">+26.0 €</div>
-      <div class="stake-label">gain net</div>
+      <div class="stake-amount">20 €</div>
+      <div class="stake-label">mise</div>
     </div>
   </div>
-  <div class="bet-row row-lost">
+  <div class="bet-row ">
     <div>
-      <span class="status-badge status-lost">✗ Perdu</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
       <span class="model-badge model-lgbm">LightGBM</span>
     </div>
     <div>
-      <div class="horse-line"><span class="horse-num">#1</span>UTKIEKER</div>
+      <div class="horse-line"><span class="horse-num">#3</span>OVIEDO BASE</div>
       <div class="bet-stats">
-        <span>Cote : <strong>5.40</strong></span>
-        <span>Modèle : <strong>19%</strong></span>
-        <span>Marché : <strong>7%</strong></span>
-        <span class="ev ev-high">EV 2.83</span>
+        <span>Cote : <strong>4.00</strong></span>
+        <span>Modèle : <strong>22%</strong></span>
+        <span>Marché : <strong>22%</strong></span>
+        <span class="ev ev-mid">EV 1.01</span>
       </div>
-      <div class="result-line"><span class="finish-pos">Arrivé 2e</span> · Vainqueur : <span class="winner-name">GREAT OF MADRIK</span></div>
+      
     </div>
     <div class="stake-col">
-      <div class="pnl-neg">-20.0 €</div>
-      <div class="stake-label">perte</div>
-    </div>
-  </div>
-
-</div>
-
-<div class="race-block">
-  <div class="race-header">
-    <span class="race-ref">WOLVEGA · R5·C4</span>
-    <span class="race-meta">
-      <span>20:59</span><span>2100 m</span><span>8 partants</span>
-    </span>
-    <span class="odds-tag odds-ok">✓ Cotes complètes</span>
-    <a class="pmu-link" href="https://www.pmu.fr/turf/03042026/R5/C4/" target="_blank">↗ pmu.fr</a>
-  </div>
-    <div class="bet-row row-won">
-    <div>
-      <span class="status-badge status-won">✓ Gagné</span>
-      <span class="model-badge model-lgbm">LightGBM</span>
-    </div>
-    <div>
-      <div class="horse-line"><span class="horse-num">#5</span>MINK BOKO TF</div>
-      <div class="bet-stats">
-        <span>Cote : <strong>2.60</strong></span>
-        <span>Modèle : <strong>28%</strong></span>
-        <span>Marché : <strong>24%</strong></span>
-        <span class="ev ev-mid">EV 1.17</span>
-      </div>
-      <div class="result-line"><span class="finish-pos">Arrivé 2e</span> · Vainqueur : <span class="winner-name">MALO RENKA TF</span></div>
-    </div>
-    <div class="stake-col">
-      <div class="pnl-pos">+12.0 €</div>
-      <div class="stake-label">gain net</div>
-    </div>
-  </div>
-  <div class="bet-row row-lost">
-    <div>
-      <span class="status-badge status-lost">✗ Perdu</span>
-      <span class="model-badge model-lgbm">LightGBM</span>
-    </div>
-    <div>
-      <div class="horse-line"><span class="horse-num">#5</span>MINK BOKO TF</div>
-      <div class="bet-stats">
-        <span>Cote : <strong>2.60</strong></span>
-        <span>Modèle : <strong>28%</strong></span>
-        <span>Marché : <strong>24%</strong></span>
-        <span class="ev ev-mid">EV 1.17</span>
-      </div>
-      <div class="result-line"><span class="finish-pos">Arrivé 2e</span> · Vainqueur : <span class="winner-name">MALO RENKA TF</span></div>
-    </div>
-    <div class="stake-col">
-      <div class="pnl-neg">-20.0 €</div>
-      <div class="stake-label">perte</div>
+      <div class="stake-amount">20 €</div>
+      <div class="stake-label">mise</div>
     </div>
   </div>
 
@@ -650,102 +512,51 @@
 <div class="race-block">
   <div class="race-header">
     <span class="race-ref">WOLVEGA · R5·C5</span>
+    <span class="disc-tag disc-attele">Attelé</span>
     <span class="race-meta">
       <span>21:30</span><span>2100 m</span><span>8 partants</span>
     </span>
     <span class="odds-tag odds-ok">✓ Cotes complètes</span>
     <a class="pmu-link" href="https://www.pmu.fr/turf/03042026/R5/C5/" target="_blank">↗ pmu.fr</a>
   </div>
-    <div class="bet-row row-won">
+    <div class="bet-row ">
     <div>
-      <span class="status-badge status-won">✓ Gagné</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
       <span class="model-badge model-lgbm">LightGBM</span>
     </div>
     <div>
-      <div class="horse-line"><span class="horse-num">#4</span>COLETTE WIBB</div>
+      <div class="horse-line"><span class="horse-num">#5</span>ROLLER COASTER</div>
       <div class="bet-stats">
-        <span>Cote : <strong>8.60</strong></span>
-        <span>Modèle : <strong>22%</strong></span>
-        <span>Marché : <strong>6%</strong></span>
-        <span class="ev ev-high">EV 3.82</span>
+        <span>Cote : <strong>4.50</strong></span>
+        <span>Modèle : <strong>31%</strong></span>
+        <span>Marché : <strong>19%</strong></span>
+        <span class="ev ev-high">EV 1.63</span>
       </div>
-      <div class="result-line"><span class="finish-pos">Arrivé 3e</span> · Vainqueur : <span class="winner-name">ROLLER COASTER</span></div>
+      
     </div>
     <div class="stake-col">
-      <div class="pnl-pos">+50.0 €</div>
-      <div class="stake-label">gain net</div>
+      <div class="stake-amount">20 €</div>
+      <div class="stake-label">mise</div>
     </div>
   </div>
-  <div class="bet-row row-lost">
+  <div class="bet-row ">
     <div>
-      <span class="status-badge status-lost">✗ Perdu</span>
+      <span class="status-badge status-pending">⏳ En attente</span>
       <span class="model-badge model-lgbm">LightGBM</span>
     </div>
     <div>
-      <div class="horse-line"><span class="horse-num">#4</span>COLETTE WIBB</div>
+      <div class="horse-line"><span class="horse-num">#5</span>ROLLER COASTER</div>
       <div class="bet-stats">
-        <span>Cote : <strong>8.60</strong></span>
-        <span>Modèle : <strong>22%</strong></span>
-        <span>Marché : <strong>6%</strong></span>
-        <span class="ev ev-high">EV 3.82</span>
+        <span>Cote : <strong>4.50</strong></span>
+        <span>Modèle : <strong>31%</strong></span>
+        <span>Marché : <strong>19%</strong></span>
+        <span class="ev ev-high">EV 1.63</span>
       </div>
-      <div class="result-line"><span class="finish-pos">Arrivé 3e</span> · Vainqueur : <span class="winner-name">ROLLER COASTER</span></div>
+      
     </div>
     <div class="stake-col">
-      <div class="pnl-neg">-20.0 €</div>
-      <div class="stake-label">perte</div>
-    </div>
-  </div>
-
-</div>
-
-<div class="race-block">
-  <div class="race-header">
-    <span class="race-ref">WOLVEGA · R5·C6</span>
-    <span class="race-meta">
-      <span>22:00</span><span>2100 m</span><span>6 partants</span>
-    </span>
-    <span class="odds-tag odds-ok">✓ Cotes complètes</span>
-    <a class="pmu-link" href="https://www.pmu.fr/turf/03042026/R5/C6/" target="_blank">↗ pmu.fr</a>
-  </div>
-    <div class="bet-row row-won">
-    <div>
-      <span class="status-badge status-won">✓ Gagné</span>
-      <span class="model-badge model-lgbm">LightGBM</span>
-    </div>
-    <div>
-      <div class="horse-line"><span class="horse-num">#2</span>OLIVER KITE</div>
-      <div class="bet-stats">
-        <span>Cote : <strong>1.70</strong></span>
-        <span>Modèle : <strong>55%</strong></span>
-        <span>Marché : <strong>21%</strong></span>
-        <span class="ev ev-high">EV 2.59</span>
-      </div>
-      <div class="result-line"><span class="finish-pos">Arrivé 2e</span> · Vainqueur : <span class="winner-name">NOVASTAR DRAVIET</span></div>
-    </div>
-    <div class="stake-col">
-      <div class="pnl-pos">+4.0 €</div>
-      <div class="stake-label">gain net</div>
-    </div>
-  </div>
-  <div class="bet-row row-lost">
-    <div>
-      <span class="status-badge status-lost">✗ Perdu</span>
-      <span class="model-badge model-lgbm">LightGBM</span>
-    </div>
-    <div>
-      <div class="horse-line"><span class="horse-num">#2</span>OLIVER KITE</div>
-      <div class="bet-stats">
-        <span>Cote : <strong>1.70</strong></span>
-        <span>Modèle : <strong>55%</strong></span>
-        <span>Marché : <strong>21%</strong></span>
-        <span class="ev ev-high">EV 2.59</span>
-      </div>
-      <div class="result-line"><span class="finish-pos">Arrivé 2e</span> · Vainqueur : <span class="winner-name">NOVASTAR DRAVIET</span></div>
-    </div>
-    <div class="stake-col">
-      <div class="pnl-neg">-20.0 €</div>
-      <div class="stake-label">perte</div>
+      <div class="stake-amount">20 €</div>
+      <div class="stake-label">mise</div>
     </div>
   </div>
 

@@ -470,9 +470,9 @@ def export_bets_html(
             _card(str(n_pending), "en attente"),
         ]
         if win_resolved:
-            cards.append(_card(f"{win_pnl:+.1f} €", "gain WIN", win_pnl_class))
+            cards.append(_card(f"{win_pnl:+.1f} €", "gain WIN Trot", win_pnl_class))
         if place_resolved:
-            cards.append(_card(f"{place_pnl:+.1f} €", "gain Placé", place_pnl_class))
+            cards.append(_card(f"{place_pnl:+.1f} €", "gain Placé Trot", place_pnl_class))
         if win_plat_resolved:
             cards.append(_card(f"{win_plat_pnl:+.1f} €", "gain WIN Plat", win_plat_pnl_class))
         if place_plat_resolved:
@@ -952,8 +952,8 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
         gains = _parse_gains_from_html(p)
         rows.append({
             "date": date,
-            "win_pnl":        gains.get("gain WIN", 0.0),
-            "place_pnl":      gains.get("gain Placé", gains.get("gain Place", 0.0)),
+            "win_pnl":        gains.get("gain WIN Trot", gains.get("gain WIN", 0.0)),
+            "place_pnl":      gains.get("gain Placé Trot", gains.get("gain Placé", gains.get("gain Place", 0.0))),
             "win_plat_pnl":   gains.get("gain WIN Plat", 0.0),
             "place_plat_pnl": gains.get("gain Placé Plat", gains.get("gain Place Plat", 0.0)),
         })
@@ -1014,8 +1014,8 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
         y_win_plat   = daily["win_plat_cum"].tolist()
         y_place_plat = daily["place_plat_cum"].tolist()
 
-        ax.plot(x, y_win,   color="#1565c0", linewidth=2.5, zorder=3, label="WIN")
-        ax.plot(x, y_place, color="#e65100", linewidth=2.5, zorder=3, label="PLACE")
+        ax.plot(x, y_win,   color="#1565c0", linewidth=2.5, zorder=3, label="WIN Trot")
+        ax.plot(x, y_place, color="#e65100", linewidth=2.5, zorder=3, label="PLACE Trot")
         ax.plot(x, y_win_plat,   color="#2563eb", linewidth=1.8, zorder=3, linestyle="--", label="WIN Plat")
         ax.plot(x, y_place_plat, color="#f59e0b", linewidth=1.8, zorder=3, linestyle="--", label="PLACE Plat")
         ax.axhline(0, color="#aaa", linewidth=0.8, linestyle="--")
@@ -1109,8 +1109,8 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
 <p class="subtitle">WIN vs PLACÉ · LightGBM &nbsp;|&nbsp; Généré le {generated_at}</p>
 
 <div class="cards">
-  <div class="card"><div class="val {win_pnl_class}">{win_pnl:+.1f} &euro;</div><div class="lbl">P&amp;L WIN</div></div>
-  <div class="card"><div class="val {place_pnl_class}">{place_pnl:+.1f} &euro;</div><div class="lbl">P&amp;L PLAC&Eacute;</div></div>
+  <div class="card"><div class="val {win_pnl_class}">{win_pnl:+.1f} &euro;</div><div class="lbl">P&amp;L WIN Trot</div></div>
+  <div class="card"><div class="val {place_pnl_class}">{place_pnl:+.1f} &euro;</div><div class="lbl">P&amp;L PLAC&Eacute; Trot</div></div>
   <div class="card"><div class="val {win_plat_pnl_class}">{win_plat_pnl:+.1f} &euro;</div><div class="lbl">P&amp;L WIN Plat</div></div>
   <div class="card"><div class="val {place_plat_pnl_class}">{place_plat_pnl:+.1f} &euro;</div><div class="lbl">P&amp;L PLAC&Eacute; Plat</div></div>
   <div class="card"><div class="val">{n_days}</div><div class="lbl">Jours actifs</div></div>
@@ -1122,8 +1122,8 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
 <table>
   <thead><tr>
     <th rowspan="2">Date</th>
-    <th colspan="2" class="win-col" style="text-align:center">WIN</th>
-    <th colspan="2" class="place-col" style="text-align:center">PLAC&Eacute;</th>
+    <th colspan="2" class="win-col" style="text-align:center">WIN Trot</th>
+    <th colspan="2" class="place-col" style="text-align:center">PLAC&Eacute; Trot</th>
     <th colspan="2" class="win-plat-col" style="text-align:center">WIN Plat</th>
     <th colspan="2" class="place-plat-col" style="text-align:center">PLAC&Eacute; Plat</th>
   </tr>
