@@ -122,7 +122,7 @@ with tab_bets:
 
         # ── Show HTML report ──────────────────────────────────────────────
         html_content = selected_path.read_text(encoding="utf-8")
-        st.html(html_content, height=900)
+        st.html(html_content)
 
         # ── Delete buttons per bet ────────────────────────────────────────
         if bets_df is not None and not bets_df.empty:
@@ -170,4 +170,4 @@ with tab_model:
         st.info("Le rapport modèle sera généré après le premier entraînement quotidien (08:00).")
     else:
         model_content = MODEL_REPORT.read_text(encoding="utf-8")
-        st.html(model_content, height=1100)
+        st.html(model_content)
