@@ -69,6 +69,17 @@ def _is_trot(specialite: str | None) -> bool:
     return specialite.upper().startswith("TROT")
 
 
+def _is_plat(specialite: str | None) -> bool:
+    """PLAT is flat racing."""
+    if not specialite:
+        return False
+    return specialite.upper() == "PLAT"
+
+
+# Disciplines we scrape and model (trot + plat).
+_SUPPORTED_DISCIPLINES = {"TROT_ATTELE", "TROT_MONTE", "PLAT"}
+
+
 def safe_float(val: Any) -> float | None:
     if val is None:
         return None
@@ -94,6 +105,20 @@ def sanitize_horse_name(name: str) -> str:
     return ascii_str.replace(" ", "_").upper()
 
 
+def _parse_weight_kg(p: dict) -> float | None:
+    """Extract weight in kg from participant dict.
+
+    Plat races use ``handicapPoids`` (hectograms, e.g. 580 = 58.0 kg).
+    Trot races may use ``poidsKg`` or ``poids`` (already in kg).
+    """
+    # Plat: handicapPoids in hectograms (divide by 10 → kg)
+    hp = safe_float(p.get("handicapPoids"))
+    if hp is not None and hp > 0:
+        return hp / 10.0
+    # Trot fallback
+    return safe_float(p.get("poidsKg") or p.get("poids"))
+
+
 def _parse_datetime(ts_ms: Any) -> datetime | None:
     if ts_ms is None:
         return None
@@ -107,13 +132,26 @@ def _parse_datetime(ts_ms: Any) -> datetime | None:
 # Parse functions
 # ---------------------------------------------------------------------------
 
-def parse_reunions(raw: dict, date: str) -> list[RaceData]:
-    """Extract trot races from the /programme/{date} response.
+def parse_reunions(
+    raw: dict,
+    date: str,
+    disciplines: set[str] | None = None,
+) -> list[RaceData]:
+    """Extract races from the /programme/{date} response.
+
+    Args:
+        raw: Raw programme JSON.
+        date: YYYYMMDD string.
+        disciplines: Set of specialite values to keep (e.g. {"TROT_ATTELE", "PLAT"}).
+            Defaults to _SUPPORTED_DISCIPLINES (trot + plat).
 
     Response structure:
         {"programme": {"reunions": [{"numOfficiel": 1, "hippodrome": {...},
             "courses": [{"numOrdre": 1, "specialite": "TROT_ATTELE", ...}]}]}}
     """
+    if disciplines is None:
+        disciplines = _SUPPORTED_DISCIPLINES
+
     programme = raw.get("programme") or {}
     reunions = programme.get("reunions") or []
     if not reunions:
@@ -127,8 +165,8 @@ def parse_reunions(raw: dict, date: str) -> list[RaceData]:
         hippodrome = hippo.get("libelleCourt") or hippo.get("libelle")
 
         for course in reunion.get("courses") or []:
-            specialite = course.get("specialite") or ""
-            if not _is_trot(specialite):
+            specialite = (course.get("specialite") or "").upper()
+            if specialite not in disciplines:
                 continue
 
             # Skip courses not available for online betting (terminal-only races
@@ -152,13 +190,13 @@ def parse_reunions(raw: dict, date: str) -> list[RaceData]:
                 distance_metres=safe_int(course.get("distance")),
                 track_condition=course.get("etatPiste") or course.get("conditionPiste"),
                 discipline=specialite,
-                is_trot=True,
+                is_trot=_is_trot(specialite),
                 field_size=safe_int(course.get("nombreDeclaresPartants")),
                 reunion_number=reunion_num,
                 course_number=course_num,
             ))
 
-    logger.info("Found {} trot race(s) for {}", len(races), date)
+    logger.info("Found {} race(s) for {} (disciplines: {})", len(races), date, disciplines)
     return races
 
 
@@ -214,10 +252,10 @@ def parse_runners(raw: dict, race_id: str) -> list[RunnerData]:
             race_id=race_id,
             horse_number=horse_num,
             horse_name=horse_name,
-            jockey_name=p.get("driver"),
+            jockey_name=p.get("driver") or p.get("jockey"),
             trainer_name=p.get("entraineur"),
             draw_position=safe_int(p.get("placeCorde")),
-            weight_kg=safe_float(p.get("poidsKg") or p.get("poids")),
+            weight_kg=_parse_weight_kg(p),
             handicap_distance=safe_int(p.get("handicapDistance")),
             deferre=deferre,
             scratch=scratch,

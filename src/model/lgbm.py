@@ -7,7 +7,11 @@ from typing import TYPE_CHECKING
 import pandas as pd
 from loguru import logger
 
-from config.settings import LGBM_MODEL_PATH, LGBM_MEDIANS_PATH, MODEL_DIR
+from config.settings import (
+    LGBM_MODEL_PATH, LGBM_MEDIANS_PATH,
+    LGBM_PLAT_MODEL_PATH, LGBM_PLAT_MEDIANS_PATH,
+    MODEL_DIR,
+)
 
 # Optuna-tuned hyperparameters (written by scripts/tune_lgbm_hyperparams.py)
 _LGBM_PARAMS_PATH = MODEL_DIR / "lgbm_params.json"
@@ -46,7 +50,7 @@ if TYPE_CHECKING:
 # look-ahead features: in training they capture the full-day market movement
 # (morning -> post-time), but at prediction time only partial drift is
 # available. This caused a train/serve skew.
-FEATURES = [
+TROT_FEATURES = [
     # Form features
     "form_score",
     "win_rate_last5",
@@ -76,11 +80,61 @@ FEATURES = [
     "days_since_last_race",
 ]
 
+PLAT_FEATURES = [
+    # Form features
+    "form_score",
+    "win_rate_last5",
+    "top3_rate_last5",
+    "form_trend",
+    "best_position_last5",
+    "n_valid_runs",
+    # Market features (available at prediction time)
+    "morning_implied_prob_norm",
+    "morning_odds_rank",
+    "is_favorite",
+    "field_entropy",
+    # Runner features
+    "jockey_win_rate",
+    "trainer_win_rate",
+    "draw_position",
+    "handicap_distance",
+    "weight_kg",
+    "race_hour",
+    # Race features
+    "distance_metres",
+    "field_size",
+    # Horse history
+    "horse_n_runs",
+    "horse_win_rate",
+    "horse_win_rate_at_track",
+    "days_since_last_race",
+]
 
-def _compute_medians(df: pd.DataFrame) -> dict[str, float]:
+# Backward-compat alias
+FEATURES = TROT_FEATURES
+
+FEATURES_BY_DISCIPLINE: dict[str, list[str]] = {
+    "trot": TROT_FEATURES,
+    "plat": PLAT_FEATURES,
+}
+
+_MODEL_PATHS: dict[str, Path] = {
+    "trot": LGBM_MODEL_PATH,
+    "plat": LGBM_PLAT_MODEL_PATH,
+}
+
+_MEDIANS_PATHS: dict[str, Path] = {
+    "trot": LGBM_MEDIANS_PATH,
+    "plat": LGBM_PLAT_MEDIANS_PATH,
+}
+
+
+def _compute_medians(df: pd.DataFrame, features: list[str] | None = None) -> dict[str, float]:
     """Compute median for each feature from a DataFrame (for NaN imputation)."""
+    if features is None:
+        features = TROT_FEATURES
     medians = {}
-    for col in FEATURES:
+    for col in features:
         vals = pd.to_numeric(df.get(col, pd.Series(dtype=float)), errors="coerce")
         med = vals.median()
         medians[col] = float(med) if pd.notna(med) else 0.0
@@ -110,6 +164,7 @@ def load_medians(path: Path = LGBM_MEDIANS_PATH) -> dict[str, float] | None:
 def _prepare_X(
     df: pd.DataFrame,
     medians: dict[str, float] | None = None,
+    features: list[str] | None = None,
 ) -> pd.DataFrame:
     """Extract and fill feature matrix.
 
@@ -118,9 +173,12 @@ def _prepare_X(
         medians: Pre-computed medians from training data. When provided,
             NaN values are filled using these fixed medians instead of
             computing per-batch medians (which would cause train/serve skew).
+        features: Feature list to use. Defaults to TROT_FEATURES.
     """
-    X = df.reindex(columns=FEATURES).copy()
-    for col in FEATURES:
+    if features is None:
+        features = TROT_FEATURES
+    X = df.reindex(columns=features).copy()
+    for col in features:
         X[col] = pd.to_numeric(X[col], errors="coerce").astype(float)
         if medians is not None:
             fill_val = medians.get(col, 0.0)
@@ -131,12 +189,13 @@ def _prepare_X(
     return X
 
 
-def train_lgbm(df: pd.DataFrame):
+def train_lgbm(df: pd.DataFrame, discipline: str = "trot"):
     """Train a LightGBM LambdaRank model on historical data.
 
     Args:
         df: Features DataFrame from compute_features() — must contain
             finish_position (not null) and race_id.
+        discipline: "trot" or "plat" — selects feature list and medians path.
 
     Returns:
         Trained LGBMRanker instance.
@@ -146,13 +205,16 @@ def train_lgbm(df: pd.DataFrame):
     if df.empty or "finish_position" not in df.columns:
         raise ValueError("df must contain finish_position for training")
 
+    features = FEATURES_BY_DISCIPLINE[discipline]
+    medians_path = _MEDIANS_PATHS[discipline]
+
     df = df.sort_values("race_id").copy()
 
     # Compute and persist training-time medians for consistent NaN imputation
-    medians = _compute_medians(df)
-    save_medians(medians)
+    medians = _compute_medians(df, features=features)
+    save_medians(medians, path=medians_path)
 
-    X = _prepare_X(df, medians=medians)
+    X = _prepare_X(df, medians=medians, features=features)
 
     # Relevance: 2 = winner, 1 = top-3, 0 = rest
     y = df["finish_position"].apply(
@@ -174,8 +236,8 @@ def train_lgbm(df: pd.DataFrame):
     model.fit(X, y, group=groups)
 
     logger.info(
-        "LightGBM LambdaRank trained on {} races / {} runners",
-        len(groups), len(df),
+        "LightGBM LambdaRank ({}) trained on {} races / {} runners",
+        discipline, len(groups), len(df),
     )
     return model
 
@@ -202,23 +264,29 @@ def load_lgbm_model(path: Path = LGBM_MODEL_PATH):
     return model
 
 
-def score_lgbm(df: pd.DataFrame, model=None) -> pd.Series:
+def score_lgbm(df: pd.DataFrame, model=None, discipline: str = "trot") -> pd.Series:
     """Score runners with the LightGBM model.
 
     Same interface as score_combined: returns a Series indexed by runner_id.
     Higher score = model ranks the horse higher.
     Auto-loads the model from disk when model=None.
     Returns a zero Series if the model is unavailable.
+
+    Args:
+        discipline: "trot" or "plat" — selects feature list and medians path.
     """
     if model is None:
-        model = load_lgbm_model()
+        model = load_lgbm_model(path=_MODEL_PATHS[discipline])
 
     if model is None:
         return pd.Series(0.0, index=df["runner_id"])
 
+    features = FEATURES_BY_DISCIPLINE[discipline]
+    medians_path = _MEDIANS_PATHS[discipline]
+
     # Use training-time medians for NaN imputation (avoids train/serve skew)
-    medians = load_medians()
-    X = _prepare_X(df, medians=medians)
+    medians = load_medians(path=medians_path)
+    X = _prepare_X(df, medians=medians, features=features)
     raw = model.predict(X, num_iteration=model.best_iteration if hasattr(model, "best_iteration") else None)
     result = pd.Series(raw, index=df["runner_id"].values)
 
@@ -244,6 +312,7 @@ def backtest_lgbm_walkforward(
     ev_threshold: float = 1.0,
     trainer_fn=None,
     model_name: str = "lgbm_walkforward",
+    discipline: str = "trot",
 ) -> "BacktestReport":
     """Walk-forward backtest for LightGBM — no data leakage.
 
@@ -259,6 +328,7 @@ def backtest_lgbm_walkforward(
         ev_threshold:   EV threshold to use when ev_filter=True.
         trainer_fn:     Function to train the model (defaults to train_lgbm).
         model_name:     Name for the BacktestReport.
+        discipline:     "trot" or "plat".
 
     Returns:
         BacktestReport aggregating all out-of-sample test days.
@@ -266,7 +336,7 @@ def backtest_lgbm_walkforward(
     from src.model.backtest import backtest, BacktestReport
 
     if trainer_fn is None:
-        trainer_fn = train_lgbm
+        trainer_fn = lambda d: train_lgbm(d, discipline=discipline)
 
     dates = sorted(df["date"].unique())
     if len(dates) <= min_train_days:
@@ -295,7 +365,7 @@ def backtest_lgbm_walkforward(
             logger.warning("Training failed for test_date={}: {}", test_date, exc)
             continue
 
-        scorer = lambda d, m=model: score_lgbm(d, m)
+        scorer = lambda d, m=model, disc=discipline: score_lgbm(d, m, discipline=disc)
         day_report = backtest(
             test_df, scorer,
             model_name=model_name,

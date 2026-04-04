@@ -9,7 +9,7 @@ import duckdb
 from loguru import logger
 
 from config.settings import WIN_EV_THRESHOLD, UNIT_STAKE
-from src.features.pipeline import enrich_base_df
+from src.features.pipeline import enrich_base_df, _discipline_filter
 from src.scraper.client import PMUClient
 from src.scraper.storage import upsert_bet
 from src.trading.kelly import kelly_stake
@@ -18,16 +18,22 @@ from src.trading.kelly import kelly_stake
 def compute_today_features(
     conn: duckdb.DuckDBPyConnection,
     date: str,
+    discipline: str = "trot",
 ) -> pd.DataFrame:
     """Build feature DataFrame for today's races (no finish_position required).
 
     Same structure as compute_features() but filters by date instead of
     finish_position IS NOT NULL. final_odds will be NULL (race hasn't run).
 
+    Args:
+        discipline: "trot" (default) or "plat".
+
     Returns one row per runner with the same columns as compute_features(),
     except finish_position will be NULL.
     """
-    base_sql = """
+    disc_sql = _discipline_filter(discipline)
+
+    base_sql = f"""
         SELECT
             ru.runner_id,
             ru.race_id,
@@ -44,10 +50,11 @@ def compute_today_features(
             ru.finish_position,
             ru.draw_position,
             ru.handicap_distance,
-            CAST(ru.deferre AS INTEGER) AS deferre
+            CAST(ru.deferre AS INTEGER) AS deferre,
+            ru.weight_kg
         FROM runners ru
         JOIN races ra ON ra.race_id = ru.race_id
-        WHERE ra.is_trot = TRUE
+        WHERE {disc_sql}
           AND ra.date = ?
           AND ru.scratch = FALSE
         ORDER BY ru.race_id, ru.horse_number
@@ -65,6 +72,7 @@ def generate_bets(
     bet_types: list[str] | None = None,
     min_race_time: datetime | None = None,
     model_source: str = "lgbm",
+    discipline: str = "trot",
 ) -> list[dict]:
     """Score today's runners and log EV+ bets to the bets table.
 
@@ -75,19 +83,22 @@ def generate_bets(
     4. Log 'win' bets for EV+ top-1 runners
     5. upsert_bet() each qualifying bet (idempotent via deterministic bet_id)
     7. Return list of bet dicts
+
+    Args:
+        discipline: "trot" (default) or "plat".
     """
     if scorer_fn is None:
-        from src.model.lgbm import load_lgbm_model, score_lgbm
-        _model = load_lgbm_model()
-        scorer_fn = lambda df, m=_model: score_lgbm(df, m)
+        from src.model.lgbm import load_lgbm_model, score_lgbm, _MODEL_PATHS
+        _model = load_lgbm_model(path=_MODEL_PATHS[discipline])
+        scorer_fn = lambda df, m=_model, disc=discipline: score_lgbm(df, m, discipline=disc)
 
     if bet_types is None:
         bet_types = ["win"]
 
-    df = compute_today_features(conn, date)
+    df = compute_today_features(conn, date, discipline=discipline)
 
     if df.empty:
-        logger.warning("No today features for {} — no bets generated", date)
+        logger.warning("No {} features for {} — no bets generated", discipline, date)
         return []
 
     try:

@@ -50,12 +50,22 @@ def mem_conn():
 # ---------------------------------------------------------------------------
 
 class TestParseReunions:
-    def test_filters_trot_only(self, reunions_raw):
+    def test_filters_supported_disciplines(self, reunions_raw):
         from src.scraper.parser import parse_reunions
         races = parse_reunions(reunions_raw, "20240226")
+        # 2 trot (VINCENNES) + 1 plat (PARIS-LONGCHAMP), terminal-only C3 excluded
+        assert len(races) == 3
+        trot = [r for r in races if r.is_trot]
+        plat = [r for r in races if r.discipline == "PLAT"]
+        assert len(trot) == 2
+        assert len(plat) == 1
+        assert plat[0].is_trot is False
+
+    def test_filters_trot_only_when_requested(self, reunions_raw):
+        from src.scraper.parser import parse_reunions
+        races = parse_reunions(reunions_raw, "20240226", disciplines={"TROT_ATTELE", "TROT_MONTE"})
         assert len(races) == 2
         assert all(r.is_trot for r in races)
-        assert all(r.hippodrome == "VINCENNES" for r in races)
 
     def test_empty_program(self):
         from src.scraper.parser import parse_reunions
@@ -78,8 +88,8 @@ class TestParseReunions:
         """Courses with hasEParis=False (terminal-only) must be excluded."""
         from src.scraper.parser import parse_reunions
         races = parse_reunions(reunions_raw, "20240226")
-        # Fixture has 3 trot courses but C3 has hasEParis=False → only 2 returned
-        assert len(races) == 2
+        # C3 has hasEParis=False → excluded; 2 trot + 1 plat = 3
+        assert len(races) == 3
         race_ids = [r.race_id for r in races]
         assert "20240226-R1-C3" not in race_ids
 
@@ -343,7 +353,7 @@ class TestPipeline:
             ]
         }
 
-    def test_skips_non_trot_races(self, tmp_path):
+    def test_fetches_trot_and_plat_races(self, tmp_path):
         from src.scraper.pipeline import run
 
         with (
@@ -361,8 +371,8 @@ class TestPipeline:
 
             result = run(date="20240226", db_path=tmp_path / "test.duckdb")
 
-        # Only 1 trot race (PLAT is skipped)
-        assert result.races_fetched == 1
+        # Both trot and plat races are fetched
+        assert result.races_fetched == 2
 
     def test_continues_on_single_race_error(self, tmp_path):
         from src.scraper.client import PipelineError

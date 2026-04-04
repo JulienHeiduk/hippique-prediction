@@ -36,6 +36,7 @@ _KEEP_COLUMNS = [
     "best_position_last5", "n_valid_runs",
     "avg_position_last3", "avg_position_last5",
     "draw_position", "handicap_distance", "deferre", "race_hour",
+    "weight_kg",
     "jockey_win_rate", "jockey_win_rate_at_track",
     "trainer_win_rate", "trainer_win_rate_at_track",
     "horse_n_runs", "horse_win_rate", "horse_win_rate_at_track",
@@ -284,14 +285,28 @@ def enrich_base_df(
 # Public entry points
 # ---------------------------------------------------------------------------
 
+def _discipline_filter(discipline: str) -> str:
+    """Return SQL WHERE clause fragment for the given discipline."""
+    if discipline == "trot":
+        return "ra.is_trot = TRUE"
+    elif discipline == "plat":
+        return "ra.discipline = 'PLAT'"
+    else:
+        raise ValueError(f"Unknown discipline: {discipline!r}")
+
+
 def compute_features(
     conn: duckdb.DuckDBPyConnection,
     race_ids: list[str] | None = None,
+    discipline: str = "trot",
 ) -> pd.DataFrame:
     """Build feature DataFrame from DuckDB (training / backtest path).
 
-    Filters to trot races where finish_position IS NOT NULL.
+    Filters to *discipline* races where finish_position IS NOT NULL.
     Returns one row per runner.
+
+    Args:
+        discipline: "trot" (default) or "plat".
     """
     race_filter = ""
     params: list = []
@@ -299,6 +314,8 @@ def compute_features(
         ph = ", ".join(["?"] * len(race_ids))
         race_filter = f"AND ra.race_id IN ({ph})"
         params = list(race_ids)
+
+    disc_sql = _discipline_filter(discipline)
 
     base_sql = f"""
         SELECT
@@ -317,10 +334,11 @@ def compute_features(
             ru.finish_position,
             ru.draw_position,
             ru.handicap_distance,
-            CAST(ru.deferre AS INTEGER) AS deferre
+            CAST(ru.deferre AS INTEGER) AS deferre,
+            ru.weight_kg
         FROM runners ru
         JOIN races ra ON ra.race_id = ru.race_id
-        WHERE ra.is_trot = TRUE
+        WHERE {disc_sql}
           AND ru.finish_position IS NOT NULL
           AND ru.scratch = FALSE
           {race_filter}

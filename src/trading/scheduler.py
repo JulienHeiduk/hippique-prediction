@@ -41,7 +41,7 @@ def _release_scheduler_lock() -> None:
 from config.settings import WIN_EV_THRESHOLD
 from src.scraper import close_connection, get_connection, run_pipeline
 from src.features.pipeline import compute_features
-from src.model.lgbm import train_lgbm, save_lgbm_model, load_lgbm_model, score_lgbm
+from src.model.lgbm import train_lgbm, save_lgbm_model, load_lgbm_model, score_lgbm, _MODEL_PATHS
 from src.trading.engine import generate_bets, resolve_bets
 from src.trading.reporter import export_bets_html, export_model_report_html, export_performance_html
 
@@ -81,23 +81,33 @@ def _git_push(path: Path) -> None:
 
 
 
+def _retrain_discipline(conn, discipline: str) -> None:
+    """Train and save LightGBM for a single discipline."""
+    hist_df = compute_features(conn, discipline=discipline)
+    if hist_df.empty:
+        logger.warning("No {} historical data — skipping model training", discipline)
+        return
+    model = train_lgbm(hist_df, discipline=discipline)
+    save_lgbm_model(model, path=_MODEL_PATHS[discipline])
+    logger.info("=== {} model retrained on {} races / {} runners ===",
+                discipline, hist_df["race_id"].nunique(), len(hist_df))
+
+
 def run_retrain_model() -> None:
     """Retrain LightGBM on all resolved historical data and save to disk.
 
     Scheduled at 08:00, 30 minutes before the morning session, so the
     model is always fresh when bets are generated at 08:30.
+    Trains both trot and plat models.
     """
     logger.info("=== Model retraining starting ===")
     conn = get_connection()
     try:
-        hist_df = compute_features(conn)
-        if hist_df.empty:
-            logger.warning("No historical data — skipping model training")
-            return
-        model = train_lgbm(hist_df)
-        save_lgbm_model(model)
-        logger.info("=== Model retrained on {} races / {} runners ===",
-                    hist_df["race_id"].nunique(), len(hist_df))
+        for disc in ("trot", "plat"):
+            try:
+                _retrain_discipline(conn, disc)
+            except Exception as exc:
+                logger.error("{} model retraining failed: {}", disc, exc)
         model_report_path = export_model_report_html(conn)
         logger.info("Model report saved → {}", model_report_path)
         _git_push(model_report_path)
@@ -129,30 +139,34 @@ def run_morning_session(date: str | None = None) -> None:
 
     conn = get_connection()
     try:
-        # Retrain LightGBM on all historical data (races with known results)
-        hist_df = compute_features(conn)
-        lgbm_model = None
-        if not hist_df.empty:
-            try:
-                lgbm_model = train_lgbm(hist_df)
-                save_lgbm_model(lgbm_model)
-            except Exception as exc:
-                logger.warning("LightGBM training failed: {} — skipping", exc)
-
-        # WIN bets (+ mirror PLACE): LightGBM
         bets_all = []
-        if lgbm_model is not None:
-            lgbm_scorer = lambda df, m=lgbm_model: score_lgbm(df, m)
-            bets_all = generate_bets(
-                conn, date,
-                scorer_fn=lgbm_scorer, model_source="lgbm",
-                bet_types=["win"], min_race_time=now, ev_threshold=WIN_EV_THRESHOLD,
-            )
+        for disc in ("trot", "plat"):
+            # Retrain LightGBM on all historical data (races with known results)
+            hist_df = compute_features(conn, discipline=disc)
+            lgbm_model = None
+            if not hist_df.empty:
+                try:
+                    lgbm_model = train_lgbm(hist_df, discipline=disc)
+                    save_lgbm_model(lgbm_model, path=_MODEL_PATHS[disc])
+                except Exception as exc:
+                    logger.warning("{} LightGBM training failed: {} — skipping", disc, exc)
+
+            # WIN bets (+ mirror PLACE): LightGBM
+            if lgbm_model is not None:
+                model_src = "lgbm" if disc == "trot" else f"lgbm_{disc}"
+                lgbm_scorer = lambda df, m=lgbm_model, d=disc: score_lgbm(df, m, discipline=d)
+                disc_bets = generate_bets(
+                    conn, date,
+                    scorer_fn=lgbm_scorer, model_source=model_src,
+                    bet_types=["win"], min_race_time=now, ev_threshold=WIN_EV_THRESHOLD,
+                    discipline=disc,
+                )
+                bets_all.extend(disc_bets)
 
         n_win = sum(1 for b in bets_all if isinstance(b, dict) and b.get("bet_type") == "win")
         n_place = sum(1 for b in bets_all if isinstance(b, dict) and b.get("bet_type") == "place")
         logger.info(
-            "=== {} win + {} place (lgbm) bets logged for {} ===",
+            "=== {} win + {} place bets logged for {} ===",
             n_win, n_place, date,
         )
         report_path = export_bets_html(conn, date)
@@ -188,21 +202,26 @@ def run_hourly_update(date: str | None = None) -> None:
 
     conn = get_connection()
     try:
-        lgbm_model = load_lgbm_model()
-        lgbm_scorer = (lambda df, m=lgbm_model: score_lgbm(df, m)) if lgbm_model else None
-
         bets_all = []
-        if lgbm_scorer:
-            bets_all = generate_bets(
+        for disc in ("trot", "plat"):
+            model_path = _MODEL_PATHS[disc]
+            lgbm_model = load_lgbm_model(path=model_path)
+            if lgbm_model is None:
+                continue
+            model_src = "lgbm" if disc == "trot" else f"lgbm_{disc}"
+            lgbm_scorer = lambda df, m=lgbm_model, d=disc: score_lgbm(df, m, discipline=d)
+            disc_bets = generate_bets(
                 conn, date,
-                scorer_fn=lgbm_scorer, model_source="lgbm",
+                scorer_fn=lgbm_scorer, model_source=model_src,
                 bet_types=["win"], min_race_time=now, ev_threshold=WIN_EV_THRESHOLD,
+                discipline=disc,
             )
+            bets_all.extend(disc_bets)
 
         n_win = sum(1 for b in bets_all if isinstance(b, dict) and b.get("bet_type") == "win")
         n_place = sum(1 for b in bets_all if isinstance(b, dict) and b.get("bet_type") == "place")
         logger.info(
-            "{} win + {} place (lgbm) bets refreshed for {}",
+            "{} win + {} place bets refreshed for {}",
             n_win, n_place, date,
         )
         report_path = export_bets_html(conn, date)

@@ -58,14 +58,14 @@ def run(
                 return result
 
             save_raw(raw_programme, date, "reunions.json")
-            trot_races = parse_reunions(raw_programme, date)
+            races = parse_reunions(raw_programme, date)
 
-            if not trot_races:
-                logger.info("No trot races found for {}.", date)
+            if not races:
+                logger.info("No races found for {}.", date)
                 return result
 
             # ---- Step 2: per-race participants fetch ----------------------------
-            for race in trot_races:
+            for race in races:
                 # Skip races that have already started when a cutoff is provided
                 if min_race_time is not None and race.race_datetime is not None:
                     cutoff = min_race_time.replace(tzinfo=None)
