@@ -15,6 +15,14 @@ from src.scraper.storage import upsert_bet
 from src.trading.kelly import kelly_stake
 
 
+# Friendly discipline labels for bets table and display
+_DISCIPLINE_TAG: dict[str, str] = {
+    "TROT_ATTELE": "Attelé",
+    "TROT_MONTE": "Trot Monté",
+    "PLAT": "Plat",
+}
+
+
 def compute_today_features(
     conn: duckdb.DuckDBPyConnection,
     date: str,
@@ -51,7 +59,8 @@ def compute_today_features(
             ru.draw_position,
             ru.handicap_distance,
             CAST(ru.deferre AS INTEGER) AS deferre,
-            ru.weight_kg
+            ru.weight_kg,
+            ra.discipline AS race_discipline
         FROM runners ru
         JOIN races ra ON ra.race_id = ru.race_id
         WHERE {disc_sql}
@@ -158,6 +167,8 @@ def generate_bets(
         race_df["model_prob"] = race_df["_score"] / total_score
 
         hippodrome = race_df["hippodrome"].iloc[0] if "hippodrome" in race_df.columns else None
+        race_disc = race_df["race_discipline"].iloc[0] if "race_discipline" in race_df.columns else None
+        disc_tag = _DISCIPLINE_TAG.get(str(race_disc or "").upper())
 
         # --- 'win' bet: top-1 runner ---
         if "win" in bet_types:
@@ -218,6 +229,7 @@ def generate_bets(
                         "created_at": existing_win.get("created_at") or now,
                         "resolved_at": None,
                         "model_source": model_source,
+                        "discipline": disc_tag,
                     }
                     upsert_bet(conn, bet)
                     bets.append(bet)
@@ -582,6 +594,7 @@ def resolve_bets(
             "created_at": bet.get("created_at"),
             "resolved_at": now,
             "model_source": bet.get("model_source", "rule_based"),
+            "discipline": bet.get("discipline"),
         }
         upsert_bet(conn, updated_bet)
 

@@ -128,12 +128,16 @@ def init_schema(conn: duckdb.DuckDBPyConnection) -> None:
             pnl           DOUBLE,
             created_at    TIMESTAMP,
             resolved_at   TIMESTAMP,
-            model_source  VARCHAR DEFAULT 'lgbm'
+            model_source  VARCHAR DEFAULT 'lgbm',
+            discipline    VARCHAR
         )
     """)
-    # Idempotent migration for existing DBs
+    # Idempotent migrations for existing DBs
     conn.execute(
         "ALTER TABLE bets ADD COLUMN IF NOT EXISTS model_source VARCHAR DEFAULT 'rule_based'"
+    )
+    conn.execute(
+        "ALTER TABLE bets ADD COLUMN IF NOT EXISTS discipline VARCHAR"
     )
     logger.debug("DuckDB schema initialised (idempotent)")
 
@@ -230,7 +234,7 @@ def upsert_horse_history(conn: duckdb.DuckDBPyConnection, rows: list[dict]) -> N
 def upsert_bet(conn: duckdb.DuckDBPyConnection, bet: dict) -> None:
     conn.execute("""
         INSERT OR REPLACE INTO bets VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
     """, [
         bet.get("bet_id"),
@@ -253,4 +257,5 @@ def upsert_bet(conn: duckdb.DuckDBPyConnection, bet: dict) -> None:
         bet.get("created_at"),
         bet.get("resolved_at"),
         bet.get("model_source", "rule_based"),
+        bet.get("discipline"),
     ])

@@ -206,6 +206,19 @@ _HTML_TEMPLATE = """\
   }}
   .odds-ok      {{ background: rgba(46,125,50,.25);  color: #a5d6a7; }}
   .odds-missing {{ background: rgba(230,81,0,.30);   color: #ffcc80; }}
+  /* ── Discipline tag ── */
+  .disc-tag {{
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }}
+  .disc-plat   {{ background: #2563eb; color: #fff; }}
+  .disc-trot   {{ background: #7c3aed; color: #fff; }}
+  .disc-attele {{ background: #7c3aed; color: #fff; }}
   /* ── Stake / P&L column ── */
   .stake-col {{
     text-align: right;
@@ -259,6 +272,7 @@ _RACE_BLOCK = """\
 <div class="race-block">
   <div class="race-header">
     <span class="race-ref">{hippodrome} · {race_ref}</span>
+    {disc_tag}
     <span class="race-meta">
       {time_span}{distance_span}{field_span}
     </span>
@@ -355,7 +369,7 @@ def export_bets_html(
             f"""
             SELECT race_id, hippodrome, race_datetime,
                    distance_metres, field_size,
-                   reunion_number, course_number
+                   reunion_number, course_number, discipline
             FROM races WHERE race_id IN ({placeholders})
             """,
             race_ids,
@@ -484,6 +498,16 @@ def export_bets_html(
             c_num = meta.get("course_number")
             race_ref = f"R{r_num}·C{c_num}" if r_num and c_num else race_id
 
+            # Discipline tag
+            raw_disc = str(meta.get("discipline") or "").upper()
+            _DISC_LABELS = {
+                "TROT_ATTELE": ("Attelé", "disc-attele"),
+                "TROT_MONTE": ("Trot Monté", "disc-trot"),
+                "PLAT": ("Plat", "disc-plat"),
+            }
+            disc_label, disc_cls = _DISC_LABELS.get(raw_disc, (raw_disc or "", "disc-trot"))
+            disc_tag = f'<span class="disc-tag {disc_cls}">{disc_label}</span>' if disc_label else ""
+
             dt = meta.get("race_datetime")
             if dt and str(dt) not in ("None", "NaT", ""):
                 try:
@@ -594,6 +618,7 @@ def export_bets_html(
             body_parts.append(_RACE_BLOCK.format(
                 hippodrome=hippodrome.upper() if hippodrome else "?",
                 race_ref=race_ref,
+                disc_tag=disc_tag,
                 time_span=time_span,
                 distance_span=distance_span,
                 field_span=field_span,

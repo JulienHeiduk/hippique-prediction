@@ -45,6 +45,7 @@ _KEEP_COLUMNS = [
     "horse_win_rate_at_distance", "horse_avg_position_at_distance",
     "horse_jockey_win_rate", "horse_jockey_n_races",
     "finish_position",
+    "race_discipline",
 ]
 
 
