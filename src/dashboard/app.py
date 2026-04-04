@@ -13,7 +13,6 @@ import json
 
 import duckdb
 import streamlit as st
-import streamlit.components.v1 as components
 
 from config.settings import DB_PATH, ROOT
 
@@ -67,10 +66,13 @@ with st.sidebar:
     stats = _get_sidebar_stats()
     if stats:
         col_w, col_p = st.columns(2)
-        col_w.metric("P&L WIN", f"{stats.get('win_pnl_total', 0):+.1f} €")
-        col_p.metric("P&L Placé", f"{stats.get('place_pnl_total', 0):+.1f} €")
+        col_w.metric("P&L WIN Trot", f"{stats.get('win_pnl_total', 0):+.1f} €")
+        col_p.metric("P&L Placé Trot", f"{stats.get('place_pnl_total', 0):+.1f} €")
+        col_wp, col_pp = st.columns(2)
+        col_wp.metric("P&L WIN Plat", f"{stats.get('win_plat_pnl_total', 0):+.1f} €")
+        col_pp.metric("P&L Placé Plat", f"{stats.get('place_plat_pnl_total', 0):+.1f} €")
     st.divider()
-    st.caption("Paper trading uniquement — Trot PMU")
+    st.caption("Paper trading uniquement — Trot & Plat PMU")
 
 # ── Main — tabs ───────────────────────────────────────────────────────────────
 tab_bets, tab_perf, tab_model = st.tabs(["📋 Paris du jour", "📈 Performance", "🤖 Évaluation des modèles"])
@@ -120,7 +122,7 @@ with tab_bets:
 
         # ── Show HTML report ──────────────────────────────────────────────
         html_content = selected_path.read_text(encoding="utf-8")
-        components.html(html_content, height=900, scrolling=True)
+        st.html(html_content, height=900, scrolling=True)
 
         # ── Delete buttons per bet ────────────────────────────────────────
         if bets_df is not None and not bets_df.empty:
@@ -150,12 +152,16 @@ with tab_perf:
         daily_df = daily_df.set_index("date")
         daily_df.index.name = "Jour"
         daily_df = daily_df.rename(columns={
-            "win_cum_pnl": "P&L cumulé WIN (€)",
-            "place_cum_pnl": "P&L cumulé Placé (€)",
+            "win_cum_pnl": "P&L cumulé WIN Trot (€)",
+            "place_cum_pnl": "P&L cumulé Placé Trot (€)",
+            "win_plat_cum_pnl": "P&L cumulé WIN Plat (€)",
+            "place_plat_cum_pnl": "P&L cumulé Placé Plat (€)",
         })
-        st.line_chart(daily_df[["P&L cumulé WIN (€)", "P&L cumulé Placé (€)"]])
-        n_resolved = perf_stats.get('win_n', 0) + perf_stats.get('place_n', 0)
-        st.caption(f"P&L cumulé WIN & Placé · LightGBM — {n_resolved} paris résolus")
+        chart_cols = ["P&L cumulé WIN Trot (€)", "P&L cumulé Placé Trot (€)"]
+        if "P&L cumulé WIN Plat (€)" in daily_df.columns:
+            chart_cols += ["P&L cumulé WIN Plat (€)", "P&L cumulé Placé Plat (€)"]
+        st.line_chart(daily_df[chart_cols])
+        st.caption("P&L cumulé WIN & Placé · Trot + Plat · LightGBM")
     else:
         st.info("Aucune donnée de performance disponible.")
 
@@ -164,4 +170,4 @@ with tab_model:
         st.info("Le rapport modèle sera généré après le premier entraînement quotidien (08:00).")
     else:
         model_content = MODEL_REPORT.read_text(encoding="utf-8")
-        components.html(model_content, height=1100, scrolling=True)
+        st.html(model_content, height=1100, scrolling=True)
