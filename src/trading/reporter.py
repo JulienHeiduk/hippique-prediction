@@ -655,39 +655,20 @@ def export_bets_html(
 
 
 def export_model_report_html(conn: duckdb.DuckDBPyConnection) -> Path:
-    """Generate the LightGBM model evaluation report.
+    """Generate the LightGBM model evaluation report (Trot + Plat).
 
     Saves to data/reports/model_report.html.
     """
     import pandas as pd
     from src.features.pipeline import compute_features
-    from src.model.lgbm import load_lgbm_model, score_lgbm, train_lgbm, FEATURES
+    from src.model.lgbm import (
+        load_lgbm_model, score_lgbm, train_lgbm,
+        FEATURES, FEATURES_BY_DISCIPLINE, _MODEL_PATHS,
+    )
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     output_path = REPORTS_DIR / "model_report.html"
     generated_at = datetime.now().strftime("%d/%m/%Y %H:%M")
-
-    # ── Load all historical features ─────────────────────────────────────────
-    df = compute_features(conn)
-    if df.empty:
-        html = f"""<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
-<title>Modèles — PMU</title></head><body>
-<h2>Aucune donnée historique disponible.</h2>
-<p style="color:#888">Généré le {generated_at}</p>
-</body></html>"""
-        output_path.write_text(html, encoding="utf-8")
-        return output_path
-
-    dates      = sorted(df["date"].unique())
-    n_races    = df["race_id"].nunique()
-    n_runners  = len(df)
-    date_min   = f"{dates[0][6:8]}/{dates[0][4:6]}/{dates[0][:4]}"
-    date_max   = f"{dates[-1][6:8]}/{dates[-1][4:6]}/{dates[-1][:4]}"
-
-    holdout_n    = min(30, max(5, len(dates) // 5))
-    holdout_dates = set(dates[-holdout_n:])
-    train_df     = df[~df["date"].isin(holdout_dates)]
-    holdout_df   = df[df["date"].isin(holdout_dates)]
 
     # ── Shared helpers ────────────────────────────────────────────────────────
     import matplotlib
@@ -729,31 +710,47 @@ def export_model_report_html(conn: duckdb.DuckDBPyConnection) -> Path:
         return (f'<img src="data:image/png;base64,{b64}" '
                 f'style="width:100%;max-width:800px;border-radius:8px;">')
 
-    # ═════════════════════════════════════════════════════════════════════════
-    # LightGBM (WIN bets)
-    # ═════════════════════════════════════════════════════════════════════════
-    lgbm_model = load_lgbm_model()
-    lgbm_section = ""
+    def _build_discipline_section(
+        disc_label: str, badge_class: str, bar_color: str,
+        discipline: str, df: pd.DataFrame,
+    ) -> str:
+        """Build model evaluation HTML section for a given discipline."""
+        features = FEATURES_BY_DISCIPLINE[discipline]
+        model = load_lgbm_model(path=_MODEL_PATHS[discipline])
 
-    if lgbm_model is not None:
-        n_trees = lgbm_model.num_trees()
+        if df.empty or model is None:
+            return f"""
+<div class="model-header lgbm-header">
+  <span class="model-badge {badge_class}">WIN · {disc_label}</span>
+</div>
+<p style="color:#888;padding:16px">Modele {disc_label} non disponible.</p>
+"""
 
-        lgbm_scorer = lambda d, m=lgbm_model: score_lgbm(d, m)
-        lgbm_is_top1, lgbm_is_top3, lgbm_is_ndcg, lgbm_n_is = _ranking_metrics(df, lgbm_scorer)
+        dates_d     = sorted(df["date"].unique())
+        n_races_d   = df["race_id"].nunique()
+        n_runners_d = len(df)
+        n_trees_d   = model.num_trees()
 
-        lgbm_ho_top1, lgbm_ho_top3, lgbm_ho_ndcg, lgbm_n_ho = 0.0, 0.0, 0.0, 0
-        if not holdout_df.empty and not train_df.empty:
+        holdout_n_d    = min(30, max(5, len(dates_d) // 5))
+        holdout_dates_d = set(dates_d[-holdout_n_d:])
+        train_df_d     = df[~df["date"].isin(holdout_dates_d)]
+        holdout_df_d   = df[df["date"].isin(holdout_dates_d)]
+
+        scorer = lambda d, m=model, disc=discipline: score_lgbm(d, m, discipline=disc)
+        is_top1, is_top3, is_ndcg, n_is = _ranking_metrics(df, scorer)
+
+        ho_top1, ho_top3, ho_ndcg, n_ho = 0.0, 0.0, 0.0, 0
+        if not holdout_df_d.empty and not train_df_d.empty:
             try:
-                ho_lgbm = train_lgbm(train_df)
-                ho_lgbm_scorer = lambda d, m=ho_lgbm: score_lgbm(d, m)
-                lgbm_ho_top1, lgbm_ho_top3, lgbm_ho_ndcg, lgbm_n_ho = _ranking_metrics(
-                    holdout_df, ho_lgbm_scorer)
+                ho_model = train_lgbm(train_df_d, discipline=discipline)
+                ho_scorer = lambda d, m=ho_model, disc=discipline: score_lgbm(d, m, discipline=disc)
+                ho_top1, ho_top3, ho_ndcg, n_ho = _ranking_metrics(holdout_df_d, ho_scorer)
             except Exception:
                 pass
 
         # Feature importance chart
-        importance = lgbm_model.feature_importance(importance_type="gain")
-        feat_names = lgbm_model.feature_name()
+        importance = model.feature_importance(importance_type="gain")
+        feat_names = model.feature_name()
         fi_df = pd.DataFrame({"feature": feat_names, "gain": importance})
         fi_df = fi_df.sort_values("gain", ascending=False).reset_index(drop=True)
         fi_df["gain_pct"] = fi_df["gain"] / fi_df["gain"].sum() * 100
@@ -763,9 +760,9 @@ def export_model_report_html(conn: duckdb.DuckDBPyConnection) -> Path:
             top_n  = min(20, len(fi_df))
             top_fi = fi_df.head(top_n).iloc[::-1]
             fig, ax = plt.subplots(figsize=(8, top_n * 0.38 + 1.2))
-            ax.barh(top_fi["feature"], top_fi["gain_pct"], color="#1565c0", alpha=0.82)
+            ax.barh(top_fi["feature"], top_fi["gain_pct"], color=bar_color, alpha=0.82)
             ax.set_xlabel("Importance (% gain)", fontsize=10)
-            ax.set_title("Importance des variables — LightGBM LambdaRank",
+            ax.set_title(f"Importance des variables - {disc_label}",
                          fontsize=12, fontweight="bold")
             ax.spines[["top", "right"]].set_visible(False)
             ax.grid(axis="x", alpha=0.3)
@@ -787,40 +784,40 @@ def export_model_report_html(conn: duckdb.DuckDBPyConnection) -> Path:
           <td>{row['feature']}</td>
           <td>
             <div style="display:flex;align-items:center;gap:8px">
-              <div style="background:#1565c0;height:10px;width:{bar_w}%;border-radius:3px;min-width:2px"></div>
+              <div style="background:{bar_color};height:10px;width:{bar_w}%;border-radius:3px;min-width:2px"></div>
               <span>{row['gain_pct']:.1f}%</span>
             </div>
           </td>
         </tr>"""
 
-        lgbm_section = f"""
+        return f"""
 <div class="model-header lgbm-header">
-  <span class="model-badge lgbm-badge">WIN · LightGBM</span>
-  <span class="model-desc">LambdaRank · {n_trees} arbres · {len(FEATURES)} variables · réentraîné quotidiennement</span>
+  <span class="model-badge {badge_class}">WIN · {disc_label}</span>
+  <span class="model-desc">LambdaRank &middot; {n_trees_d} arbres &middot; {len(features)} variables &middot; reentr. quotidiennement</span>
 </div>
 
 <div class="cards">
-  <div class="card"><div class="val">{n_races:,}</div><div class="lbl">Courses (entraînement)</div></div>
-  <div class="card"><div class="val">{n_runners:,}</div><div class="lbl">Chevaux</div></div>
-  <div class="card"><div class="val">{n_trees}</div><div class="lbl">Arbres de décision</div></div>
-  <div class="card"><div class="val">{len(FEATURES)}</div><div class="lbl">Variables</div></div>
+  <div class="card"><div class="val">{n_races_d:,}</div><div class="lbl">Courses</div></div>
+  <div class="card"><div class="val">{n_runners_d:,}</div><div class="lbl">Chevaux</div></div>
+  <div class="card"><div class="val">{n_trees_d}</div><div class="lbl">Arbres</div></div>
+  <div class="card"><div class="val">{len(features)}</div><div class="lbl">Variables</div></div>
 </div>
 
-<div class="section-title">Métriques de ranking</div>
+<div class="section-title">Metriques de ranking</div>
 <div class="metrics-grid">
   <div class="metric-card">
-    <h3>In-sample — {lgbm_n_is:,} courses</h3>
-    <div class="metric-row"><span>Top-1 accuracy</span>{_pct(lgbm_is_top1)}</div>
-    <div class="metric-row"><span>Top-3 accuracy</span>{_pct(lgbm_is_top3)}</div>
-    <div class="metric-row"><span>NDCG@1</span>{_pct(lgbm_is_ndcg)}</div>
-    <p class="note">Modèle scoré sur ses propres données d'entraînement — optimiste.</p>
+    <h3>In-sample &mdash; {n_is:,} courses</h3>
+    <div class="metric-row"><span>Top-1 accuracy</span>{_pct(is_top1)}</div>
+    <div class="metric-row"><span>Top-3 accuracy</span>{_pct(is_top3)}</div>
+    <div class="metric-row"><span>NDCG@1</span>{_pct(is_ndcg)}</div>
+    <p class="note">Modele score sur ses propres donnees d'entrainement.</p>
   </div>
   <div class="metric-card">
-    <h3>Holdout <span class="tag">quasi out-of-sample</span> — {lgbm_n_ho:,} courses</h3>
-    <div class="metric-row"><span>Top-1 accuracy</span>{_pct(lgbm_ho_top1)}</div>
-    <div class="metric-row"><span>Top-3 accuracy</span>{_pct(lgbm_ho_top3)}</div>
-    <div class="metric-row"><span>NDCG@1</span>{_pct(lgbm_ho_ndcg)}</div>
-    <p class="note">Entraîné sur tout sauf les {holdout_n} derniers jours.</p>
+    <h3>Holdout <span class="tag">quasi out-of-sample</span> &mdash; {n_ho:,} courses</h3>
+    <div class="metric-row"><span>Top-1 accuracy</span>{_pct(ho_top1)}</div>
+    <div class="metric-row"><span>Top-3 accuracy</span>{_pct(ho_top3)}</div>
+    <div class="metric-row"><span>NDCG@1</span>{_pct(ho_ndcg)}</div>
+    <p class="note">Entraine sur tout sauf les {holdout_n_d} derniers jours.</p>
   </div>
 </div>
 
@@ -832,13 +829,29 @@ def export_model_report_html(conn: duckdb.DuckDBPyConnection) -> Path:
   <tbody>{fi_rows}</tbody>
 </table>
 """
-    else:
-        lgbm_section = """
-<div class="model-header lgbm-header">
-  <span class="model-badge lgbm-badge">WIN · LightGBM</span>
-</div>
-<p style="color:#888;padding:16px">Modèle LightGBM non disponible — lancez un entraînement à 08:00.</p>
-"""
+
+    # ── Load features per discipline ─────────────────────────────────────────
+    df_trot = compute_features(conn, discipline="trot")
+    df_plat = compute_features(conn, discipline="plat")
+
+    if df_trot.empty and df_plat.empty:
+        html = f"""<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
+<title>Modeles - PMU</title></head><body>
+<h2>Aucune donnee historique disponible.</h2>
+<p style="color:#888">Genere le {generated_at}</p>
+</body></html>"""
+        output_path.write_text(html, encoding="utf-8")
+        return output_path
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # Build sections for each discipline
+    # ═════════════════════════════════════════════════════════════════════════
+    trot_section = _build_discipline_section(
+        "LightGBM Trot", "lgbm-badge", "#1565c0", "trot", df_trot,
+    )
+    plat_section = _build_discipline_section(
+        "LightGBM Plat", "plat-badge", "#2563eb", "plat", df_plat,
+    )
 
     # ═════════════════════════════════════════════════════════════════════════
     # Assemble final HTML
@@ -886,6 +899,7 @@ def export_model_report_html(conn: duckdb.DuckDBPyConnection) -> Path:
                   font-size:13px; font-weight:700; letter-spacing:.5px; }}
   .rb-badge   {{ background:#fff3e0; color:#e65100; border:1px solid #ffcc80; }}
   .lgbm-badge {{ background:#e8eaf6; color:#283593; border:1px solid #9fa8da; }}
+  .plat-badge {{ background:#dbeafe; color:#1d4ed8; border:1px solid #93c5fd; }}
   .model-desc {{ font-size:13px; color:#666; }}
   .divider {{ height:2px; background:#e8eaf6; margin:32px 0 28px; border-radius:1px; }}
   code {{ background:#f0f0f0; padding:1px 5px; border-radius:3px; font-size:12px; }}
@@ -895,9 +909,13 @@ def export_model_report_html(conn: duckdb.DuckDBPyConnection) -> Path:
 <h1>Évaluation des modèles</h1>
 <p class="subtitle">Généré le {generated_at}</p>
 
-{lgbm_section}
+{trot_section}
 
-<div class="footer">Stratégie PMU — WIN · LightGBM</div>
+<div class="divider"></div>
+
+{plat_section}
+
+<div class="footer">Strategie PMU - WIN - LightGBM Trot + Plat</div>
 </body>
 </html>"""
 
