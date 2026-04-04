@@ -935,18 +935,29 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
     bets_df["date"] = bets_df["date"].astype(str)
     bets_df["hit"] = bets_df["status"] == "won"
 
+    # Keep only dates that have a corresponding bet sheet HTML — earlier
+    # dates used different stakes/strategies and are not part of the current
+    # reporting window.
+    existing_dates = {
+        p.stem.replace("bets_", "")
+        for p in REPORTS_DIR.glob("bets_*.html")
+    }
+    bets_df = bets_df[bets_df["date"].isin(existing_dates)]
+    if bets_df.empty:
+        html = f"""<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
+<title>Performance — PMU</title></head><body>
+<h2>Aucune donnée résolue disponible.</h2>
+<p style="color:#888">Généré le {generated_at}</p></body></html>"""
+        output_path.write_text(html, encoding="utf-8")
+        return output_path
+
     # ── Normalise to UNIT_STAKE (old 2€ bets → ×10, new 20€ bets → ×1) ───────
     bets_df["_scale"] = UNIT_STAKE / bets_df["stake"].clip(lower=0.01)
     bets_df["_pnl_d"] = bets_df["pnl"]   * bets_df["_scale"]
     bets_df["_stk_d"] = bets_df["stake"] * bets_df["_scale"]
 
-    # ── All dates: union of bet-sheet HTML dates + dates with resolved bets ──
-    html_dates = {
-        p.stem.replace("bets_", "")
-        for p in REPORTS_DIR.glob("bets_*.html")
-    }
-    bet_dates = set(bets_df["date"].unique())
-    all_dates = sorted(html_dates | bet_dates)
+    # ── All bet-sheet dates (including 0-bet days) ───────────────────────────
+    all_dates = sorted(existing_dates)
     all_dates_df = pd.DataFrame({"date": all_dates})
 
     # ── Helper: build daily summary for a given bet_type + optional discipline
