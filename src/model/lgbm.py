@@ -10,11 +10,17 @@ from loguru import logger
 from config.settings import (
     LGBM_MODEL_PATH, LGBM_MEDIANS_PATH,
     LGBM_PLAT_MODEL_PATH, LGBM_PLAT_MEDIANS_PATH,
+    LGBM_PLAT_PARAMS_PATH,
     MODEL_DIR,
 )
 
 # Optuna-tuned hyperparameters (written by scripts/tune_lgbm_hyperparams.py)
 _LGBM_PARAMS_PATH = MODEL_DIR / "lgbm_params.json"
+
+_PARAMS_PATHS: dict[str, Path] = {
+    "trot": _LGBM_PARAMS_PATH,
+    "plat": LGBM_PLAT_PARAMS_PATH,
+}
 
 # Fixed fallback hyperparameters (used when no tuned params file exists)
 _DEFAULT_PARAMS: dict = {
@@ -27,18 +33,19 @@ _DEFAULT_PARAMS: dict = {
 }
 
 
-def _load_lgbm_params() -> dict:
+def _load_lgbm_params(discipline: str = "trot") -> dict:
     """Return tuned params from disk if available, else fallback defaults."""
     import json
-    if _LGBM_PARAMS_PATH.exists():
-        with open(_LGBM_PARAMS_PATH) as f:
+    params_path = _PARAMS_PATHS.get(discipline, _LGBM_PARAMS_PATH)
+    if params_path.exists():
+        with open(params_path) as f:
             stored = json.load(f)
         # Strip metadata keys, keep only LightGBM params
         lgbm_keys = {"n_estimators", "num_leaves", "learning_rate",
                      "min_child_samples", "subsample", "colsample_bytree",
                      "reg_alpha", "reg_lambda"}
         params = {k: v for k, v in stored.items() if k in lgbm_keys}
-        logger.debug("Loaded tuned LGBM params from {}", _LGBM_PARAMS_PATH)
+        logger.debug("Loaded tuned LGBM params ({}) from {}", discipline, params_path)
         return params
     return _DEFAULT_PARAMS.copy()
 
@@ -97,7 +104,6 @@ PLAT_FEATURES = [
     "jockey_win_rate",
     "trainer_win_rate",
     "draw_position",
-    "handicap_distance",
     "weight_kg",
     "race_hour",
     # Race features
@@ -224,7 +230,7 @@ def train_lgbm(df: pd.DataFrame, discipline: str = "trot"):
     # Group sizes (runners per race, in sorted race_id order)
     groups = df.groupby("race_id", sort=True).size().values
 
-    params = _load_lgbm_params()
+    params = _load_lgbm_params(discipline)
     model = lgb.LGBMRanker(
         objective="lambdarank",
         metric="ndcg",

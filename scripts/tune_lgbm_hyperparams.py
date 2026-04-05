@@ -4,10 +4,11 @@ Uses GPU (device_type='gpu' / OpenCL) for faster trial evaluation.
 Optimises for WIN ROI using LightGBM LambdaRank.
 
 Usage:
-    python scripts/tune_lgbm_hyperparams.py [--n-trials 50] [--cpu]
+    python scripts/tune_lgbm_hyperparams.py [--n-trials 50] [--cpu] [--discipline trot|plat]
 
 Outputs:
-    data/models/lgbm_params.json  — best hyperparameters
+    data/models/lgbm_params.json       — best hyperparameters (trot)
+    data/models/lgbm_plat_params.json  — best hyperparameters (plat)
     Summary table printed to stdout
 """
 from __future__ import annotations
@@ -28,19 +29,18 @@ from config.settings import MODEL_DIR
 from src.scraper import get_connection
 from src.features.pipeline import compute_features
 from src.model.backtest import backtest, BacktestReport
-from src.model.lgbm import _prepare_X
+from src.model.lgbm import _prepare_X, FEATURES_BY_DISCIPLINE, _PARAMS_PATHS
 
-LGBM_PARAMS_PATH = MODEL_DIR / "lgbm_params.json"
 N_FOLDS = 3
 MIN_TRAIN_DAYS = 30
 
 
-def _train_with_params(df: pd.DataFrame, params: dict, device: str) -> object:
+def _train_with_params(df: pd.DataFrame, params: dict, device: str, features: list[str]) -> object:
     """Train LGBMRanker with custom params + WIN label (2=1st, 1=top3, 0=rest)."""
     import lightgbm as lgb
 
     df = df.sort_values("race_id").copy()
-    X = _prepare_X(df)
+    X = _prepare_X(df, features=features)
     y = df["finish_position"].apply(
         lambda p: 2 if p == 1 else (1 if p <= 3 else 0)
     ).values
@@ -63,6 +63,8 @@ def _cv_roi(
     df: pd.DataFrame,
     params: dict,
     device: str,
+    features: list[str],
+    discipline: str,
     n_folds: int = N_FOLDS,
     bet_type: str = "win",
 ) -> float:
@@ -92,19 +94,19 @@ def _cv_roi(
             continue
 
         try:
-            model = _train_with_params(train_df, params, device)
+            model = _train_with_params(train_df, params, device, features)
         except Exception as exc:
             logger.warning("Training failed (fold {}): {}", fold, exc)
             return -1.0  # penalise bad params
 
-        scorer = lambda d, m=model: score_lgbm(d, m)
+        scorer = lambda d, m=model, disc=discipline: score_lgbm(d, m, discipline=disc)
         report = backtest(test_df, scorer, model_name="optuna_cv", bet_type=bet_type)
         rois.append(report.roi)
 
     return sum(rois) / len(rois) if rois else -1.0
 
 
-def make_objective(df: pd.DataFrame, device: str, bet_type: str):
+def make_objective(df: pd.DataFrame, device: str, bet_type: str, features: list[str], discipline: str):
     def objective(trial: optuna.Trial) -> float:
         params = {
             "num_leaves": trial.suggest_int("num_leaves", 15, 127),
@@ -116,7 +118,7 @@ def make_objective(df: pd.DataFrame, device: str, bet_type: str):
             "reg_alpha": trial.suggest_float("reg_alpha", 1e-4, 10.0, log=True),
             "reg_lambda": trial.suggest_float("reg_lambda", 1e-4, 10.0, log=True),
         }
-        roi = _cv_roi(df, params, device, bet_type=bet_type)
+        roi = _cv_roi(df, params, device, features, discipline, bet_type=bet_type)
         return roi
 
     return objective
@@ -127,9 +129,13 @@ def main() -> None:
     parser.add_argument("--n-trials", type=int, default=50)
     parser.add_argument("--cpu", action="store_true", help="Force CPU (disable GPU)")
     parser.add_argument("--bet-type", default="win", choices=["win"])
+    parser.add_argument("--discipline", default="trot", choices=["trot", "plat"])
     args = parser.parse_args()
 
     device = "cpu" if args.cpu else "gpu"
+    discipline = args.discipline
+    features = FEATURES_BY_DISCIPLINE[discipline]
+    params_path = _PARAMS_PATHS[discipline]
 
     # Verify GPU availability
     if device == "gpu":
@@ -146,28 +152,28 @@ def main() -> None:
             logger.warning("GPU unavailable ({}), falling back to CPU", exc)
             device = "cpu"
 
-    logger.info("Loading historical features...")
+    logger.info("Loading historical features (discipline={})...", discipline)
     conn = get_connection()
     try:
-        df = compute_features(conn)
+        df = compute_features(conn, discipline=discipline)
     finally:
         conn.close()
 
     logger.info(
-        "Dataset: {} dates / {} races / {} runners | device={}",
-        df["date"].nunique(), df["race_id"].nunique(), len(df), device,
+        "Dataset: {} dates / {} races / {} runners | device={} | discipline={}",
+        df["date"].nunique(), df["race_id"].nunique(), len(df), device, discipline,
     )
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     study = optuna.create_study(direction="maximize")
 
     logger.info(
-        "Starting Optuna: {} trials, {}-fold CV, bet_type={}",
-        args.n_trials, N_FOLDS, args.bet_type,
+        "Starting Optuna: {} trials, {}-fold CV, bet_type={}, discipline={}",
+        args.n_trials, N_FOLDS, args.bet_type, discipline,
     )
 
     study.optimize(
-        make_objective(df, device, args.bet_type),
+        make_objective(df, device, args.bet_type, features, discipline),
         n_trials=args.n_trials,
         show_progress_bar=True,
     )
@@ -189,15 +195,15 @@ def main() -> None:
         "reg_alpha": 0.0,
         "reg_lambda": 0.0,
     }
-    baseline_roi = _cv_roi(df, baseline_params, device, bet_type=args.bet_type)
+    baseline_roi = _cv_roi(df, baseline_params, device, features, discipline, bet_type=args.bet_type)
 
     print("\n" + "=" * 60)
-    print(f"OPTUNA RESULTS — {args.bet_type.upper()} bets, {args.n_trials} trials")
+    print(f"OPTUNA RESULTS — {args.bet_type.upper()} bets, {args.n_trials} trials, {discipline.upper()}")
     print("=" * 60)
     print(f"Baseline (fixed params)  CV ROI: {baseline_roi:.1%}")
     print(f"Optuna best              CV ROI: {best_roi:.1%}")
     print(f"Improvement:             {best_roi - baseline_roi:+.1%}")
-    print("\nBest hyperparameters:")
+    print(f"\nBest hyperparameters:")
     for k, v in best.items():
         baseline_v = baseline_params.get(k, "N/A")
         print(f"  {k:<22} {v!r:>12}   (was {baseline_v!r})")
@@ -207,15 +213,16 @@ def main() -> None:
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     output = {
         "source": "optuna",
+        "discipline": discipline,
         "n_trials": args.n_trials,
         "bet_type": args.bet_type,
         "cv_roi": best_roi,
         "baseline_cv_roi": baseline_roi,
         **best,
     }
-    with open(LGBM_PARAMS_PATH, "w") as f:
+    with open(params_path, "w") as f:
         json.dump(output, f, indent=2)
-    logger.info("Best params saved -> {}", LGBM_PARAMS_PATH)
+    logger.info("Best params saved -> {}", params_path)
 
 
 if __name__ == "__main__":

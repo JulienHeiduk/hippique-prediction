@@ -12,6 +12,7 @@ LGBM_MODEL_PATH = MODEL_DIR / "lgbm_ranker.txt"       # Trot WIN model (label: 2
 LGBM_MEDIANS_PATH = MODEL_DIR / "lgbm_medians.json"   # Trot training-time medians for NaN imputation
 LGBM_PLAT_MODEL_PATH = MODEL_DIR / "plat_ranker.txt"  # Plat WIN model
 LGBM_PLAT_MEDIANS_PATH = MODEL_DIR / "plat_medians.json"  # Plat training-time medians
+LGBM_PLAT_PARAMS_PATH = MODEL_DIR / "lgbm_plat_params.json"  # Plat-specific hyperparameters
 
 # PMU API  (date format in URLs: DDMMYYYY)
 PMU_BASE = "https://offline.turfinfo.api.pmu.fr/rest/client/7"

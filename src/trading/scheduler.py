@@ -307,7 +307,7 @@ def start_scheduler() -> None:
     # coalesce=True: if multiple slots were missed, run only once on restart
     scheduler.add_job(run_hourly_update, "cron", hour="10-21", minute="0,30",
                       misfire_grace_time=1800, coalesce=True)
-    scheduler.add_job(run_hourly_update, "cron", hour="22", minute="0",
+    scheduler.add_job(run_hourly_update, "cron", hour="23", minute="59",
                       misfire_grace_time=1800, coalesce=True)
 
     # Evening resolution at 22:30 (results published ~22:00)
