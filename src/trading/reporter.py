@@ -1010,6 +1010,8 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
                 "date":               daily.iloc[i]["date_label"],
                 "win_cum_pnl":        round(daily.iloc[i]["win_cum"], 2),
                 "place_cum_pnl":      round(daily.iloc[i]["place_cum"], 2),
+                "win_plat_cum_pnl":   round(daily.iloc[i]["win_plat_cum"], 2),
+                "place_plat_cum_pnl": round(daily.iloc[i]["place_plat_cum"], 2),
             }
             for i in range(n_days)
         ],

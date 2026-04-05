@@ -154,8 +154,13 @@ with tab_perf:
         daily_df = daily_df.rename(columns={
             "win_cum_pnl": "P&L cumulé WIN Trot (€)",
             "place_cum_pnl": "P&L cumulé Placé Trot (€)",
+            "win_plat_cum_pnl": "P&L cumulé WIN Plat (€)",
+            "place_plat_cum_pnl": "P&L cumulé Placé Plat (€)",
         })
-        st.line_chart(daily_df[["P&L cumulé WIN Trot (€)", "P&L cumulé Placé Trot (€)"]])
+        chart_cols = ["P&L cumulé WIN Trot (€)", "P&L cumulé Placé Trot (€)"]
+        if "P&L cumulé WIN Plat (€)" in daily_df.columns:
+            chart_cols += ["P&L cumulé WIN Plat (€)", "P&L cumulé Placé Plat (€)"]
+        st.line_chart(daily_df[chart_cols])
         st.caption("P&L cumulé WIN & Placé · Trot + Plat · LightGBM")
     else:
         st.info("Aucune donnée de performance disponible.")
