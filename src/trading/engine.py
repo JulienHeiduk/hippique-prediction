@@ -319,6 +319,24 @@ def generate_bets(
 
 
 
+def _extract_win_dividend(rapports: list, horse_num: int) -> float | None:
+    """Parse E_SIMPLE_GAGNANT dividend for a specific horse number.
+
+    Returns gross return per 1€ staked (e.g. 12.70), or None if not found.
+    """
+    for entry in rapports:
+        if entry.get("typePari") != "E_SIMPLE_GAGNANT":
+            continue
+        for rap in entry.get("rapports", []):
+            combo = rap.get("combinaison", "")
+            if combo == str(horse_num):
+                div = rap.get("dividendePourUnEuro") or rap.get("dividende")
+                if div and div > 0:
+                    mise_base = entry.get("miseBase", 100)
+                    return float(div) / float(mise_base)
+    return None
+
+
 def _extract_place_dividend(rapports: list, horse_num: int) -> float | None:
     """Parse E_SIMPLE_PLACE dividend for a specific horse number.
 
@@ -438,11 +456,12 @@ def resolve_bets(
         ).df()
         finished_races = set(finished_df["race_id"].tolist())
 
-    # Fetch rapports définitifs for races that have place or duo bets.
-    # We need these for actual SIMPLE_PLACE and COUPLE_GAGNANT dividends.
+    # Fetch rapports définitifs for all races with bets.
+    # We need these for actual SIMPLE_GAGNANT, SIMPLE_PLACE, and COUPLE_GAGNANT dividends.
+    win_race_ids = set(pending_df.loc[pending_df["bet_type"] == "win", "race_id"].unique())
     place_race_ids = set(pending_df.loc[pending_df["bet_type"] == "place", "race_id"].unique())
     duo_race_ids = set(pending_df.loc[pending_df["bet_type"] == "duo", "race_id"].unique())
-    rapport_race_ids = list(place_race_ids | duo_race_ids)
+    rapport_race_ids = list(win_race_ids | place_race_ids | duo_race_ids)
 
     race_info_df = conn.execute(
         f"""
@@ -505,13 +524,19 @@ def resolve_bets(
         elif bet_type == "win":
             stake = UNIT_STAKE
             hit = int(pos1) == 1
-            # Use the actual final dividend (dernierRapportDirect); fall back to
-            # the reference morning odds only if no final odds are available.
-            odds = final_odds_map.get(runner_id_1) or (
-                morning_odds if (morning_odds is not None and not pd.isna(morning_odds)) else None
-            )
-            if hit and odds is not None:
-                pnl = (float(odds) - 1.0) * stake
+            if hit:
+                # Use actual E_SIMPLE_GAGNANT dividend from rapports définitifs
+                horse_num = horse_num_map.get(runner_id_1)
+                race_rapports = rapports_cache.get(race_id, [])
+                win_div = _extract_win_dividend(race_rapports, horse_num) if horse_num else None
+                if win_div is not None:
+                    pnl = (win_div - 1.0) * stake
+                else:
+                    # Fallback: live final odds or morning odds
+                    odds = final_odds_map.get(runner_id_1) or (
+                        morning_odds if (morning_odds is not None and not pd.isna(morning_odds)) else None
+                    )
+                    pnl = (float(odds) - 1.0) * stake if odds else -stake
             else:
                 pnl = -stake
             status = "won" if hit else "lost"

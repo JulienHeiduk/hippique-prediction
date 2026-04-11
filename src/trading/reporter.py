@@ -441,16 +441,20 @@ def export_bets_html(
     total_pnl    = sum((b.get("pnl")   or 0) * _bet_scale(b) for b in resolved)
     roi = total_pnl / total_stake if total_stake > 0 else None
 
-    # Split P&L by bet type
+    # Split P&L by bet type and discipline
+    _PLAT_TAGS = {"Plat"}
     win_resolved  = [b for b in resolved if b.get("bet_type") == "win"]
     place_resolved = [b for b in resolved if b.get("bet_type") == "place"]
-    win_pnl   = sum((b.get("pnl") or 0) * _bet_scale(b) for b in win_resolved)
-    place_pnl = sum((b.get("pnl") or 0) * _bet_scale(b) for b in place_resolved)
 
-    # Split P&L by discipline (Plat)
-    _PLAT_TAGS = {"Plat"}
-    win_plat_resolved  = [b for b in win_resolved  if b.get("discipline") in _PLAT_TAGS]
-    place_plat_resolved = [b for b in place_resolved if b.get("discipline") in _PLAT_TAGS]
+    # Trot = everything not Plat
+    win_trot_resolved   = [b for b in win_resolved   if b.get("discipline") not in _PLAT_TAGS]
+    place_trot_resolved = [b for b in place_resolved  if b.get("discipline") not in _PLAT_TAGS]
+    win_pnl   = sum((b.get("pnl") or 0) * _bet_scale(b) for b in win_trot_resolved)
+    place_pnl = sum((b.get("pnl") or 0) * _bet_scale(b) for b in place_trot_resolved)
+
+    # Plat
+    win_plat_resolved   = [b for b in win_resolved   if b.get("discipline") in _PLAT_TAGS]
+    place_plat_resolved = [b for b in place_resolved  if b.get("discipline") in _PLAT_TAGS]
     win_plat_pnl   = sum((b.get("pnl") or 0) * _bet_scale(b) for b in win_plat_resolved)
     place_plat_pnl = sum((b.get("pnl") or 0) * _bet_scale(b) for b in place_plat_resolved)
 
@@ -469,9 +473,9 @@ def export_bets_html(
             _card(f"{n_won}/{n_won+n_lost}" if (n_won + n_lost) else "0/0", "gagnés"),
             _card(str(n_pending), "en attente"),
         ]
-        if win_resolved:
+        if win_trot_resolved:
             cards.append(_card(f"{win_pnl:+.1f} €", "gain WIN Trot", win_pnl_class))
-        if place_resolved:
+        if place_trot_resolved:
             cards.append(_card(f"{place_pnl:+.1f} €", "gain Placé Trot", place_pnl_class))
         if win_plat_resolved:
             cards.append(_card(f"{win_plat_pnl:+.1f} €", "gain WIN Plat", win_plat_pnl_class))

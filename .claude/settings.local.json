@@ -30,7 +30,12 @@
       "Bash(.venv/Scripts/python.exe -c \":*)",
       "Bash(cmd //c \"taskkill /PID 30700 /F\")",
       "Bash(ls logs/*.log)",
-      "Bash(find C:UsersjulieOneDriveBureauhippique-predictiondatareports -type f -name *.html -o -name *.json)"
+      "Bash(find C:UsersjulieOneDriveBureauhippique-predictiondatareports -type f -name *.html -o -name *.json)",
+      "Bash(ls -la /c/Users/julie/OneDrive/Bureau/hippique-prediction/data/reports/bets_*.html)",
+      "Bash(mv:*)",
+      "Bash(tasklist)",
+      "Bash(findstr \"python3.12\")",
+      "Bash(tasklist:*)"
     ]
   }
 }
