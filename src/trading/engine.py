@@ -180,10 +180,28 @@ def generate_bets(
             morning_implied_top1 = top1.get("morning_implied_prob_norm")
             if final_implied_top1 is not None and not pd.isna(final_implied_top1):
                 implied_prob_top1 = float(final_implied_top1)
+                odds_for_check = top1.get("final_odds")
             elif morning_implied_top1 is not None and not pd.isna(morning_implied_top1):
                 implied_prob_top1 = float(morning_implied_top1)
+                odds_for_check = top1.get("morning_odds")
             else:
                 implied_prob_top1 = 1.0 / field_size
+                odds_for_check = None
+
+            # Guard: reject races where the implied-prob normalisation is broken.
+            # Well-formed races have sum(1/odds) in ~[1.0, 1.3], so normalised
+            # implied prob should be ≥ ~0.77 × (1/odds). A garbage runner (e.g.
+            # a foreign track with a bogus 1.x morning quote) can blow up the
+            # race_sum denominator and crush every normalised prob to near-zero,
+            # producing phantom EVs that look like huge edges but aren't.
+            if odds_for_check is not None and not pd.isna(odds_for_check) and float(odds_for_check) > 1.0:
+                raw_implied = 1.0 / float(odds_for_check)
+                if implied_prob_top1 < 0.3 * raw_implied:
+                    logger.warning(
+                        "Skipping {}: broken implied-prob norm (implied={:.4f}, 1/odds={:.4f})",
+                        race_id, implied_prob_top1, raw_implied,
+                    )
+                    continue
 
             model_prob_top1 = float(top1["model_prob"])
             ev_ratio = model_prob_top1 / implied_prob_top1 if implied_prob_top1 > 0 else 0.0
@@ -207,6 +225,8 @@ def generate_bets(
                     # Preserve only when truly no odds available now
                     if morning_odds_val is None and existing_win.get("morning_odds") is not None:
                         morning_odds_val = existing_win["morning_odds"]
+                    if morning_odds_val is None:
+                        continue
                     ks = kelly_stake(model_prob_top1, morning_odds_val or field_size)
                     bet = {
                         "bet_id": bet_id_win,
