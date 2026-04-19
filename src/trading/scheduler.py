@@ -202,6 +202,13 @@ def run_hourly_update(date: str | None = None) -> None:
 
     conn = get_connection()
     try:
+        # Resolve any pending bets whose races have finished so the daily
+        # stop-loss guard inside generate_bets sees up-to-date realized P&L.
+        try:
+            resolve_bets(conn, date)
+        except Exception as exc:
+            logger.warning("Mid-day resolve_bets failed: {}", exc)
+
         bets_all = []
         for disc in ("trot", "plat"):
             model_path = _MODEL_PATHS[disc]

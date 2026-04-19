@@ -8,7 +8,7 @@ import pandas as pd
 import duckdb
 from loguru import logger
 
-from config.settings import WIN_EV_THRESHOLD, UNIT_STAKE
+from config.settings import WIN_EV_THRESHOLD, UNIT_STAKE, DAILY_STOP_LOSS
 from src.features.pipeline import enrich_base_df, _discipline_filter
 from src.scraper.client import PMUClient
 from src.scraper.storage import upsert_bet
@@ -103,6 +103,26 @@ def generate_bets(
 
     if bet_types is None:
         bet_types = ["win"]
+
+    # Daily stop-loss: freeze new bets when realized P&L for this (date, model)
+    # has already hit the cap. Backtest showed no winning day ever triggered it,
+    # while losing days got truncated — pure downside protection.
+    realized = conn.execute(
+        """
+        SELECT COALESCE(SUM(pnl), 0) AS pnl
+        FROM bets
+        WHERE date = ? AND model_source = ? AND status IN ('won', 'lost')
+        """,
+        [date, model_source],
+    ).fetchone()
+    realized_pnl = float(realized[0]) if realized and realized[0] is not None else 0.0
+    if realized_pnl <= -abs(DAILY_STOP_LOSS):
+        logger.warning(
+            "Daily stop-loss hit for {}/{}: realized P&L={:.2f} ≤ -{:.2f}. "
+            "No new bets generated.",
+            date, model_source, realized_pnl, DAILY_STOP_LOSS,
+        )
+        return []
 
     df = compute_today_features(conn, date, discipline=discipline)
 

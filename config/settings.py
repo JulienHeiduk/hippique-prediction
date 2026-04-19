@@ -26,3 +26,4 @@ KELLY_FRACTION = 0.25     # conservative Kelly multiplier
 EV_THRESHOLD = 1.0        # default EV threshold (model_prob > implied_prob * threshold)
 WIN_EV_THRESHOLD = 1.0    # WIN bets: lgbm scorer
 UNIT_STAKE = 20.0         # € per unit (paper mode)
+DAILY_STOP_LOSS = 200.0   # max cumulative realized loss per (date, model) before new bets are frozen
