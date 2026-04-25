@@ -27,3 +27,9 @@ EV_THRESHOLD = 1.0        # default EV threshold (model_prob > implied_prob * th
 WIN_EV_THRESHOLD = 1.0    # WIN bets: lgbm scorer
 UNIT_STAKE = 20.0         # € per unit (paper mode)
 DAILY_STOP_LOSS = 200.0   # max cumulative realized loss per (date, model) before new bets are frozen
+
+# Plat model: weight on model vs market when blending probabilities.
+# 1.0 = pure model, 0.0 = pure market. Walk-forward sweep on resolved
+# plat history showed pure model (1.0) gave best ROI (+6.3%); blending
+# diluted the signal because the binary classifier is already calibrated.
+PLAT_MARKET_BLEND_W = 1.0

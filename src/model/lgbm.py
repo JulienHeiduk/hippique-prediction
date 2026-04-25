@@ -249,6 +249,142 @@ def train_lgbm(df: pd.DataFrame, discipline: str = "trot"):
 
 
 
+def train_lgbm_binary(df: pd.DataFrame, discipline: str = "plat"):
+    """Train a binary win-classifier (objective='binary').
+
+    Label: 1 if finish_position == 1 else 0. Unlike LambdaRank, the
+    raw output is a calibrated win probability that can be compared
+    to the market-implied probability for EV decisions.
+
+    Args:
+        df: Features DataFrame from compute_features() — must contain
+            finish_position and race_id.
+        discipline: "trot" or "plat" — selects feature list and medians path.
+
+    Returns:
+        Trained LGBMClassifier instance.
+    """
+    import lightgbm as lgb
+
+    if df.empty or "finish_position" not in df.columns:
+        raise ValueError("df must contain finish_position for training")
+
+    features = FEATURES_BY_DISCIPLINE[discipline]
+    medians_path = _MEDIANS_PATHS[discipline]
+
+    df = df.sort_values("race_id").copy()
+
+    medians = _compute_medians(df, features=features)
+    save_medians(medians, path=medians_path)
+
+    X = _prepare_X(df, medians=medians, features=features)
+    y = (pd.to_numeric(df["finish_position"], errors="coerce") == 1).astype(int).values
+
+    params = _load_lgbm_params(discipline)
+    model = lgb.LGBMClassifier(
+        objective="binary",
+        random_state=42,
+        verbose=-1,
+        **params,
+    )
+    model.fit(X, y)
+
+    n_races = df["race_id"].nunique()
+    logger.info(
+        "LightGBM binary classifier ({}) trained on {} races / {} runners ({} winners)",
+        discipline, n_races, len(df), int(y.sum()),
+    )
+    return model
+
+
+def score_lgbm_binary(
+    df: pd.DataFrame,
+    model=None,
+    discipline: str = "plat",
+    blend_w: float | None = None,
+) -> pd.Series:
+    """Score with binary classifier: per-race normalize then market-blend.
+
+    Returns a Series indexed by runner_id whose values sum to 1 within
+    each race, so engine.py / backtest.py can divide-by-total to recover
+    the same probabilities (no behaviour change in the consumers).
+
+    Args:
+        blend_w: Weight on the model in the blend. None → use settings
+            PLAT_MARKET_BLEND_W. 1.0 disables blending (pure model).
+    """
+    from src.model.calibration import blend_with_market
+    from config.settings import PLAT_MARKET_BLEND_W
+
+    if blend_w is None:
+        blend_w = PLAT_MARKET_BLEND_W
+
+    if model is None:
+        model = load_lgbm_model(path=_MODEL_PATHS[discipline])
+
+    if model is None:
+        return pd.Series(0.0, index=df["runner_id"])
+
+    features = FEATURES_BY_DISCIPLINE[discipline]
+    medians_path = _MEDIANS_PATHS[discipline]
+    medians = load_medians(path=medians_path)
+    X = _prepare_X(df, medians=medians, features=features)
+
+    if hasattr(model, "predict_proba"):
+        raw = model.predict_proba(X)[:, 1]
+    else:
+        # Booster loaded from disk: with objective='binary', predict() returns
+        # the sigmoid-applied probability of class 1 directly.
+        raw = model.predict(X)
+
+    out = pd.Series(raw, index=df["runner_id"].values, dtype=float)
+
+    if "race_id" not in df.columns:
+        return out
+
+    for _, group in df.groupby("race_id"):
+        idx = group["runner_id"].values
+        s = out.loc[idx]
+        total = s.sum()
+        if total > 0:
+            s = s / total
+        if blend_w < 1.0 and "morning_implied_prob_norm" in group.columns:
+            implied_vals = pd.to_numeric(
+                group["morning_implied_prob_norm"], errors="coerce",
+            ).fillna(1.0 / len(group))
+            implied = pd.Series(implied_vals.values, index=idx, dtype=float)
+            implied_total = implied.sum()
+            if implied_total > 0:
+                implied = implied / implied_total
+            blended = blend_with_market(s, implied, w=blend_w)
+            blended_total = blended.sum()
+            if blended_total > 0:
+                blended = blended / blended_total
+            out.loc[idx] = blended
+        else:
+            out.loc[idx] = s
+
+    return out
+
+
+def train_for_discipline(df: pd.DataFrame, discipline: str):
+    """Dispatch to the right trainer for *discipline*.
+
+    Plat → binary classifier (calibrated probability).
+    Trot → LambdaRank (working in production).
+    """
+    if discipline == "plat":
+        return train_lgbm_binary(df, discipline=discipline)
+    return train_lgbm(df, discipline=discipline)
+
+
+def score_for_discipline(df: pd.DataFrame, model, discipline: str) -> pd.Series:
+    """Dispatch to the right scorer for *discipline*."""
+    if discipline == "plat":
+        return score_lgbm_binary(df, model, discipline=discipline)
+    return score_lgbm(df, model, discipline=discipline)
+
+
 def save_lgbm_model(model, path: Path = LGBM_MODEL_PATH) -> Path:
     """Save the trained model to disk (LightGBM native text format)."""
     path.parent.mkdir(parents=True, exist_ok=True)

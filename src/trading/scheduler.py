@@ -41,7 +41,10 @@ def _release_scheduler_lock() -> None:
 from config.settings import WIN_EV_THRESHOLD
 from src.scraper import close_connection, get_connection, run_pipeline
 from src.features.pipeline import compute_features
-from src.model.lgbm import train_lgbm, save_lgbm_model, load_lgbm_model, score_lgbm, _MODEL_PATHS
+from src.model.lgbm import (
+    train_for_discipline, save_lgbm_model, load_lgbm_model,
+    score_for_discipline, _MODEL_PATHS,
+)
 from src.trading.engine import generate_bets, resolve_bets
 from src.trading.reporter import export_bets_html, export_model_report_html, export_performance_html
 
@@ -87,7 +90,7 @@ def _retrain_discipline(conn, discipline: str) -> None:
     if hist_df.empty:
         logger.warning("No {} historical data — skipping model training", discipline)
         return
-    model = train_lgbm(hist_df, discipline=discipline)
+    model = train_for_discipline(hist_df, discipline=discipline)
     save_lgbm_model(model, path=_MODEL_PATHS[discipline])
     logger.info("=== {} model retrained on {} races / {} runners ===",
                 discipline, hist_df["race_id"].nunique(), len(hist_df))
@@ -146,7 +149,7 @@ def run_morning_session(date: str | None = None) -> None:
             lgbm_model = None
             if not hist_df.empty:
                 try:
-                    lgbm_model = train_lgbm(hist_df, discipline=disc)
+                    lgbm_model = train_for_discipline(hist_df, discipline=disc)
                     save_lgbm_model(lgbm_model, path=_MODEL_PATHS[disc])
                 except Exception as exc:
                     logger.warning("{} LightGBM training failed: {} — skipping", disc, exc)
@@ -154,7 +157,7 @@ def run_morning_session(date: str | None = None) -> None:
             # WIN bets (+ mirror PLACE): LightGBM
             if lgbm_model is not None:
                 model_src = "lgbm" if disc == "trot" else f"lgbm_{disc}"
-                lgbm_scorer = lambda df, m=lgbm_model, d=disc: score_lgbm(df, m, discipline=d)
+                lgbm_scorer = lambda df, m=lgbm_model, d=disc: score_for_discipline(df, m, discipline=d)
                 disc_bets = generate_bets(
                     conn, date,
                     scorer_fn=lgbm_scorer, model_source=model_src,
@@ -216,7 +219,7 @@ def run_hourly_update(date: str | None = None) -> None:
             if lgbm_model is None:
                 continue
             model_src = "lgbm" if disc == "trot" else f"lgbm_{disc}"
-            lgbm_scorer = lambda df, m=lgbm_model, d=disc: score_lgbm(df, m, discipline=d)
+            lgbm_scorer = lambda df, m=lgbm_model, d=disc: score_for_discipline(df, m, discipline=d)
             disc_bets = generate_bets(
                 conn, date,
                 scorer_fn=lgbm_scorer, model_source=model_src,
