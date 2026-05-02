@@ -8,7 +8,7 @@ import pandas as pd
 import duckdb
 from loguru import logger
 
-from config.settings import WIN_EV_THRESHOLD, UNIT_STAKE, DAILY_STOP_LOSS
+from config.settings import WIN_EV_THRESHOLD, UNIT_STAKE, DAILY_STOP_LOSS, MAX_BETTABLE_ODDS
 from src.features.pipeline import enrich_base_df, _discipline_filter
 from src.scraper.client import PMUClient
 from src.scraper.storage import upsert_bet
@@ -222,6 +222,15 @@ def generate_bets(
                         race_id, implied_prob_top1, raw_implied,
                     )
                     continue
+
+            # Reject implausible odds (typically post-race "non-runner" sentinels
+            # like 999 that leaked through the morning_odds fallback path).
+            if odds_for_check is not None and not pd.isna(odds_for_check) and float(odds_for_check) > MAX_BETTABLE_ODDS:
+                logger.warning(
+                    "Skipping {}: top-1 odds {:.1f} above sanity cap {:.0f} (likely sentinel)",
+                    race_id, float(odds_for_check), MAX_BETTABLE_ODDS,
+                )
+                continue
 
             model_prob_top1 = float(top1["model_prob"])
             ev_ratio = model_prob_top1 / implied_prob_top1 if implied_prob_top1 > 0 else 0.0

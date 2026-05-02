@@ -33,3 +33,10 @@ DAILY_STOP_LOSS = 200.0   # max cumulative realized loss per (date, model) befor
 # plat history showed pure model (1.0) gave best ROI (+6.3%); blending
 # diluted the signal because the binary classifier is already calibrated.
 PLAT_MARKET_BLEND_W = 1.0
+
+# Sanity cap for "morning_odds" used at bet time. Real betting prices
+# very rarely exceed 100; values above this threshold (e.g. 999) are
+# typically post-race non-runner sentinels or scraper placeholders that
+# leaked into the morning_odds fallback path. Bets with effective odds
+# above the cap are skipped to avoid phantom EV.
+MAX_BETTABLE_ODDS = 100.0

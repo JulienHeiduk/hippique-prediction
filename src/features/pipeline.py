@@ -6,6 +6,7 @@ from datetime import datetime
 import pandas as pd
 import duckdb
 
+from config.settings import MAX_BETTABLE_ODDS
 from src.features.form import form_score, extended_form_features
 from src.features.market import odds_features
 
@@ -91,8 +92,15 @@ def enrich_base_df(
     odds_df = conn.execute(odds_sql, race_ids_in).df()
 
     if morning_odds_fallback:
-        # When reference price not yet published (e.g. late races at 08:30),
-        # use live odds so that implied-prob features are not all NaN.
+        # In production, the 'final' odds slot can carry post-race
+        # non-runner sentinels (e.g. 999) or scraper placeholders that
+        # were never real betting prices. Drop those before they leak
+        # into either the morning_odds fallback or the live-EV path.
+        odds_df.loc[
+            odds_df["final_odds"] > MAX_BETTABLE_ODDS, "final_odds"
+        ] = float("nan")
+        # When the reference price is not yet published (e.g. late races
+        # at 08:30), use live odds so implied-prob features aren't all NaN.
         odds_df["morning_odds"] = odds_df["morning_odds"].combine_first(
             odds_df["final_odds"]
         )
