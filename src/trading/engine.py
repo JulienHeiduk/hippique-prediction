@@ -8,11 +8,21 @@ import pandas as pd
 import duckdb
 from loguru import logger
 
-from config.settings import WIN_EV_THRESHOLD, UNIT_STAKE, DAILY_STOP_LOSS, MAX_BETTABLE_ODDS
+from config.settings import (
+    WIN_EV_THRESHOLD, UNIT_STAKE, DAILY_STOP_LOSS, MAX_BETTABLE_ODDS,
+    LGBM_PLAT_CALIBRATOR_PATH, LGBM_TROT_CALIBRATOR_PATH,
+)
 from src.features.pipeline import enrich_base_df, _discipline_filter
+from src.model.calibration import IsotonicProbCalibrator
 from src.scraper.client import PMUClient
 from src.scraper.storage import upsert_bet
 from src.trading.kelly import kelly_stake
+
+
+_CALIBRATOR_PATHS = {
+    "trot": LGBM_TROT_CALIBRATOR_PATH,
+    "plat": LGBM_PLAT_CALIBRATOR_PATH,
+}
 
 
 # Friendly discipline labels for bets table and display
@@ -139,6 +149,12 @@ def generate_bets(
     score_map = dict(zip(scores.index, scores.values))
     df["_score"] = df["runner_id"].map(score_map).fillna(0.0)
 
+    # Load isotonic calibrator if one was persisted for this discipline.
+    # Applied to the top-1 model_prob just before the EV check so the
+    # comparison to the implied prob is on the empirical hit-rate scale,
+    # not the raw (over-confident) model output.
+    calibrator = IsotonicProbCalibrator.load(_CALIBRATOR_PATHS[discipline])
+
     # Filter out races that have already started
     if min_race_time is not None and "race_datetime" in df.columns:
         # race_datetime from DuckDB is tz-naive local time; pandas 2.x requires a
@@ -233,6 +249,8 @@ def generate_bets(
                 continue
 
             model_prob_top1 = float(top1["model_prob"])
+            if calibrator is not None:
+                model_prob_top1 = float(calibrator.transform([model_prob_top1])[0])
             ev_ratio = model_prob_top1 / implied_prob_top1 if implied_prob_top1 > 0 else 0.0
 
             if model_prob_top1 > implied_prob_top1 * ev_threshold:

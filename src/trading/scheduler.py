@@ -38,15 +38,45 @@ def _release_scheduler_lock() -> None:
     except OSError:
         pass
 
-from config.settings import WIN_EV_THRESHOLD
+from config.settings import (
+    WIN_EV_THRESHOLD, EV_THRESHOLDS,
+    LGBM_PLAT_CALIBRATOR_PATH, LGBM_TROT_CALIBRATOR_PATH,
+)
 from src.scraper import close_connection, get_connection, run_pipeline
 from src.features.pipeline import compute_features
 from src.model.lgbm import (
     train_for_discipline, save_lgbm_model, load_lgbm_model,
     score_for_discipline, _MODEL_PATHS,
 )
+from src.model.calibration import fit_calibrator_temporal_holdout
 from src.trading.engine import generate_bets, resolve_bets
 from src.trading.reporter import export_bets_html, export_model_report_html, export_performance_html
+
+
+_CALIBRATOR_PATHS = {
+    "trot": LGBM_TROT_CALIBRATOR_PATH,
+    "plat": LGBM_PLAT_CALIBRATOR_PATH,
+}
+
+
+def _train_calibrator(hist_df, discipline: str) -> None:
+    """Fit + save isotonic calibrator using a temporal holdout split.
+
+    The model trained on the holdout's *prior* dates is used to score the
+    holdout, so the (model_prob, outcome) pairs the isotonic sees are
+    out-of-sample. Errors are logged but never bubble up — calibration is
+    optional; production engine works fine without one.
+    """
+    try:
+        calibrator = fit_calibrator_temporal_holdout(
+            hist_df,
+            train_fn=lambda d, disc=discipline: train_for_discipline(d, discipline=disc),
+            score_fn=lambda d, m, disc=discipline: score_for_discipline(d, m, discipline=disc),
+            calib_frac=0.2,
+        )
+        calibrator.save(_CALIBRATOR_PATHS[discipline])
+    except Exception as exc:
+        logger.warning("{} calibrator fit failed: {} -- continuing without", discipline, exc)
 
 
 def _git_push(path: Path) -> None:
@@ -85,7 +115,7 @@ def _git_push(path: Path) -> None:
 
 
 def _retrain_discipline(conn, discipline: str) -> None:
-    """Train and save LightGBM for a single discipline."""
+    """Train and save LightGBM for a single discipline (+ calibrator)."""
     hist_df = compute_features(conn, discipline=discipline)
     if hist_df.empty:
         logger.warning("No {} historical data — skipping model training", discipline)
@@ -94,6 +124,7 @@ def _retrain_discipline(conn, discipline: str) -> None:
     save_lgbm_model(model, path=_MODEL_PATHS[discipline])
     logger.info("=== {} model retrained on {} races / {} runners ===",
                 discipline, hist_df["race_id"].nunique(), len(hist_df))
+    _train_calibrator(hist_df, discipline)
 
 
 def run_retrain_model() -> None:
@@ -156,15 +187,21 @@ def run_morning_session(date: str | None = None) -> None:
 
             # WIN bets (+ mirror PLACE): LightGBM
             if lgbm_model is not None:
-                model_src = "lgbm" if disc == "trot" else f"lgbm_{disc}"
-                lgbm_scorer = lambda df, m=lgbm_model, d=disc: score_for_discipline(df, m, discipline=d)
-                disc_bets = generate_bets(
-                    conn, date,
-                    scorer_fn=lgbm_scorer, model_source=model_src,
-                    bet_types=["win"], min_race_time=now, ev_threshold=WIN_EV_THRESHOLD,
-                    discipline=disc,
-                )
-                bets_all.extend(disc_bets)
+                ev_thr = EV_THRESHOLDS.get(disc, WIN_EV_THRESHOLD)
+                if ev_thr == float("inf"):
+                    logger.info("{} win bets paused (EV threshold = inf)", disc)
+                else:
+                    # Train calibrator now that we have a freshly trained model.
+                    _train_calibrator(hist_df, disc)
+                    model_src = "lgbm" if disc == "trot" else f"lgbm_{disc}"
+                    lgbm_scorer = lambda df, m=lgbm_model, d=disc: score_for_discipline(df, m, discipline=d)
+                    disc_bets = generate_bets(
+                        conn, date,
+                        scorer_fn=lgbm_scorer, model_source=model_src,
+                        bet_types=["win"], min_race_time=now, ev_threshold=ev_thr,
+                        discipline=disc,
+                    )
+                    bets_all.extend(disc_bets)
 
         n_win = sum(1 for b in bets_all if isinstance(b, dict) and b.get("bet_type") == "win")
         n_place = sum(1 for b in bets_all if isinstance(b, dict) and b.get("bet_type") == "place")
@@ -214,6 +251,9 @@ def run_hourly_update(date: str | None = None) -> None:
 
         bets_all = []
         for disc in ("trot", "plat"):
+            ev_thr = EV_THRESHOLDS.get(disc, WIN_EV_THRESHOLD)
+            if ev_thr == float("inf"):
+                continue
             model_path = _MODEL_PATHS[disc]
             lgbm_model = load_lgbm_model(path=model_path)
             if lgbm_model is None:
@@ -223,7 +263,7 @@ def run_hourly_update(date: str | None = None) -> None:
             disc_bets = generate_bets(
                 conn, date,
                 scorer_fn=lgbm_scorer, model_source=model_src,
-                bet_types=["win"], min_race_time=now, ev_threshold=WIN_EV_THRESHOLD,
+                bet_types=["win"], min_race_time=now, ev_threshold=ev_thr,
                 discipline=disc,
             )
             bets_all.extend(disc_bets)

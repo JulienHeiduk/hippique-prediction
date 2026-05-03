@@ -13,6 +13,8 @@ LGBM_MEDIANS_PATH = MODEL_DIR / "lgbm_medians.json"   # Trot training-time media
 LGBM_PLAT_MODEL_PATH = MODEL_DIR / "plat_ranker.txt"  # Plat WIN model
 LGBM_PLAT_MEDIANS_PATH = MODEL_DIR / "plat_medians.json"  # Plat training-time medians
 LGBM_PLAT_PARAMS_PATH = MODEL_DIR / "lgbm_plat_params.json"  # Plat-specific hyperparameters
+LGBM_PLAT_CALIBRATOR_PATH = MODEL_DIR / "plat_calibrator.joblib"  # Isotonic calibrator
+LGBM_TROT_CALIBRATOR_PATH = MODEL_DIR / "trot_calibrator.joblib"  # Isotonic calibrator (trot, when re-enabled)
 
 # PMU API  (date format in URLs: DDMMYYYY)
 PMU_BASE = "https://offline.turfinfo.api.pmu.fr/rest/client/7"
@@ -40,3 +42,12 @@ PLAT_MARKET_BLEND_W = 1.0
 # leaked into the morning_odds fallback path. Bets with effective odds
 # above the cap are skipped to avoid phantom EV.
 MAX_BETTABLE_ODDS = 100.0
+
+# Per-discipline EV thresholds. Walk-forward analysis on the last 30 days
+# showed plat win bets are profitable only at EV ratio >= 1.5 (+21% ROI on
+# the restricted set). Trot win is paused (threshold = +inf) until the trot
+# model is retrained as a calibrated binary classifier.
+EV_THRESHOLDS: dict[str, float] = {
+    "trot": float("inf"),
+    "plat": 1.5,
+}
