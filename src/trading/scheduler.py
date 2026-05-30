@@ -185,11 +185,11 @@ def run_morning_session(date: str | None = None) -> None:
                 except Exception as exc:
                     logger.warning("{} LightGBM training failed: {} — skipping", disc, exc)
 
-            # WIN bets (+ mirror PLACE): LightGBM
+            # PLACE bets (top-1 EV-filtered selection): LightGBM
             if lgbm_model is not None:
                 ev_thr = EV_THRESHOLDS.get(disc, WIN_EV_THRESHOLD)
                 if ev_thr == float("inf"):
-                    logger.info("{} win bets paused (EV threshold = inf)", disc)
+                    logger.info("{} place bets paused (EV threshold = inf)", disc)
                 else:
                     # Train calibrator now that we have a freshly trained model.
                     _train_calibrator(hist_df, disc)
@@ -198,7 +198,7 @@ def run_morning_session(date: str | None = None) -> None:
                     disc_bets = generate_bets(
                         conn, date,
                         scorer_fn=lgbm_scorer, model_source=model_src,
-                        bet_types=["win"], min_race_time=now, ev_threshold=ev_thr,
+                        bet_types=["place"], min_race_time=now, ev_threshold=ev_thr,
                         discipline=disc,
                     )
                     bets_all.extend(disc_bets)
@@ -263,7 +263,7 @@ def run_hourly_update(date: str | None = None) -> None:
             disc_bets = generate_bets(
                 conn, date,
                 scorer_fn=lgbm_scorer, model_source=model_src,
-                bet_types=["win"], min_race_time=now, ev_threshold=ev_thr,
+                bet_types=["place"], min_race_time=now, ev_threshold=ev_thr,
                 discipline=disc,
             )
             bets_all.extend(disc_bets)

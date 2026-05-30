@@ -206,8 +206,8 @@ def generate_bets(
         race_disc = race_df["race_discipline"].iloc[0] if "race_discipline" in race_df.columns else None
         disc_tag = _DISCIPLINE_TAG.get(str(race_disc or "").upper())
 
-        # --- 'win' bet: top-1 runner ---
-        if "win" in bet_types:
+        # --- top-1 selection (drives 'win' and/or mirrored 'place' tickets) ---
+        if "win" in bet_types or "place" in bet_types:
             top1 = race_df.iloc[0]
 
             # Prefer live (final) odds for EV — reflects the current market.
@@ -254,70 +254,79 @@ def generate_bets(
             ev_ratio = model_prob_top1 / implied_prob_top1 if implied_prob_top1 > 0 else 0.0
 
             if model_prob_top1 > implied_prob_top1 * ev_threshold:
-                bet_id_win = f"{race_id}_win{_sfx}"
-                existing_win = existing_map.get(bet_id_win, {})
+                bet_id_win   = f"{race_id}_win{_sfx}"
+                bet_id_place = f"{race_id}_place{_sfx}"
+                existing_win   = existing_map.get(bet_id_win, {})
+                existing_place = existing_map.get(bet_id_place, {})
 
-                # Never overwrite a resolved bet
-                if existing_win.get("status") in ("won", "lost"):
-                    bets.append(existing_win)  # keep it in the returned list
-                else:
-                    # Best available odds: prefer live (final) over morning reference
-                    final_odds_top1   = top1.get("final_odds")
-                    morning_odds_top1 = top1.get("morning_odds")
-                    morning_odds_val  = (
-                        float(final_odds_top1)   if final_odds_top1   is not None and not pd.isna(final_odds_top1)   else
-                        float(morning_odds_top1) if morning_odds_top1 is not None and not pd.isna(morning_odds_top1) else
-                        None
-                    )
-                    # Preserve only when truly no odds available now
-                    if morning_odds_val is None and existing_win.get("morning_odds") is not None:
-                        morning_odds_val = existing_win["morning_odds"]
-                    if morning_odds_val is None:
-                        continue
-                    ks = kelly_stake(model_prob_top1, morning_odds_val or field_size)
-                    bet = {
-                        "bet_id": bet_id_win,
-                        "race_id": str(race_id),
-                        "date": date,
-                        "hippodrome": hippodrome,
-                        "bet_type": "win",
-                        "runner_id_1": str(top1["runner_id"]),
-                        "runner_id_2": None,
-                        "horse_name_1": top1.get("horse_name"),
-                        "horse_name_2": None,
-                        "morning_odds": morning_odds_val,
-                        "model_prob": model_prob_top1,
-                        "implied_prob": float(implied_prob_top1),
-                        "ev_ratio": ev_ratio,
-                        "kelly_stake": ks,
-                        "stake": UNIT_STAKE,
-                        "status": "pending",
-                        "pnl": None,
-                        "created_at": existing_win.get("created_at") or now,
-                        "resolved_at": None,
-                        "model_source": model_source,
-                        "discipline": disc_tag,
-                    }
-                    upsert_bet(conn, bet)
-                    bets.append(bet)
+                # Best available odds: prefer live (final) over morning reference
+                final_odds_top1   = top1.get("final_odds")
+                morning_odds_top1 = top1.get("morning_odds")
+                morning_odds_val  = (
+                    float(final_odds_top1)   if final_odds_top1   is not None and not pd.isna(final_odds_top1)   else
+                    float(morning_odds_top1) if morning_odds_top1 is not None and not pd.isna(morning_odds_top1) else
+                    None
+                )
+                # Preserve a previously-stored cote when no live/morning odds now
+                if morning_odds_val is None:
+                    morning_odds_val = existing_win.get("morning_odds") or existing_place.get("morning_odds")
+                if morning_odds_val is None:
+                    continue
+                ks = kelly_stake(model_prob_top1, morning_odds_val or field_size)
 
-                    # Mirror place bet: same horse, no extra EV filter
-                    bet_id_place = f"{race_id}_place{_sfx}"
-                    existing_place = existing_map.get(bet_id_place, {})
-                    if existing_place.get("status") not in ("won", "lost"):
+                # Shared selection result; bet_id / bet_type set per ticket below.
+                base = {
+                    "race_id": str(race_id),
+                    "date": date,
+                    "hippodrome": hippodrome,
+                    "runner_id_1": str(top1["runner_id"]),
+                    "runner_id_2": None,
+                    "horse_name_1": top1.get("horse_name"),
+                    "horse_name_2": None,
+                    "morning_odds": morning_odds_val,
+                    "model_prob": model_prob_top1,
+                    "implied_prob": float(implied_prob_top1),
+                    "ev_ratio": ev_ratio,
+                    "kelly_stake": ks,
+                    "stake": UNIT_STAKE,
+                    "status": "pending",
+                    "pnl": None,
+                    "resolved_at": None,
+                    "model_source": model_source,
+                    "discipline": disc_tag,
+                }
+
+                # --- WIN ticket (top-1, EV-filtered) ---
+                if "win" in bet_types:
+                    if existing_win.get("status") in ("won", "lost"):
+                        bets.append(existing_win)  # never overwrite a resolved bet
+                    else:
+                        win_bet = {
+                            **base,
+                            "bet_id": bet_id_win,
+                            "bet_type": "win",
+                            "created_at": existing_win.get("created_at") or now,
+                        }
+                        upsert_bet(conn, win_bet)
+                        bets.append(win_bet)
+
+                # --- PLACE ticket (mirror: same horse, no extra EV filter) ---
+                if "place" in bet_types:
+                    if existing_place.get("status") in ("won", "lost"):
+                        bets.append(existing_place)  # never overwrite a resolved bet
+                    else:
                         place_bet = {
-                            **bet,
+                            **base,
                             "bet_id": bet_id_place,
                             "bet_type": "place",
                             "created_at": existing_place.get("created_at") or now,
                         }
                         upsert_bet(conn, place_bet)
                         bets.append(place_bet)
-                    else:
-                        bets.append(existing_place)
 
                 logger.info(
-                    "BET win+place | {} | {} | model_prob={:.2%} implied={:.2%} EV={:.2f}",
+                    "BET {} | {} | {} | model_prob={:.2%} implied={:.2%} EV={:.2f}",
+                    "+".join(t for t in ("win", "place") if t in bet_types) or "none",
                     race_id, top1.get("horse_name"), model_prob_top1,
                     implied_prob_top1, ev_ratio,
                 )

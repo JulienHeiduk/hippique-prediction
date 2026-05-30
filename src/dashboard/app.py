@@ -65,9 +65,7 @@ with st.sidebar:
     st.divider()
     stats = _get_sidebar_stats()
     if stats:
-        col_wp, col_pp = st.columns(2)
-        col_wp.metric("P&L WIN Plat", f"{stats.get('win_plat_pnl_total', 0):+.1f} €")
-        col_pp.metric("P&L Placé Plat", f"{stats.get('place_plat_pnl_total', 0):+.1f} €")
+        st.metric("P&L Placé Plat", f"{stats.get('place_plat_pnl_total', 0):+.1f} €")
     st.divider()
     st.caption("Paper trading uniquement — Trot & Plat PMU")
 
@@ -149,14 +147,13 @@ with tab_perf:
         daily_df = daily_df.set_index("date")
         daily_df.index.name = "Jour"
         daily_df = daily_df.rename(columns={
-            "win_plat_cum_pnl": "P&L cumulé WIN Plat (€)",
             "place_plat_cum_pnl": "P&L cumulé Placé Plat (€)",
         })
-        chart_cols = ["P&L cumulé WIN Plat (€)", "P&L cumulé Placé Plat (€)"]
+        chart_cols = ["P&L cumulé Placé Plat (€)"]
         chart_cols = [c for c in chart_cols if c in daily_df.columns]
         if chart_cols:
             st.line_chart(daily_df[chart_cols])
-            st.caption("P&L cumulé Plat · WIN & Placé · depuis le 06/05/2026 · LightGBM")
+            st.caption("P&L cumulé Plat · Placé · depuis le 06/05/2026 · LightGBM")
         else:
             st.info("Aucune donnée de performance disponible.")
     else:

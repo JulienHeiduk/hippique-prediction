@@ -1002,12 +1002,10 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
 
     # ── Write stats.json sidecar for the Streamlit dashboard ─────────────────
     stats_payload = {
-        "win_plat_pnl_total":    round(win_plat_pnl, 2),
         "place_plat_pnl_total":  round(place_plat_pnl, 2),
         "daily": [
             {
                 "date":               daily.iloc[i]["date_label"],
-                "win_plat_cum_pnl":   round(daily.iloc[i]["win_plat_cum"], 2),
                 "place_plat_cum_pnl": round(daily.iloc[i]["place_plat_cum"], 2),
             }
             for i in range(n_days)
@@ -1024,16 +1022,14 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
 
         fig, ax = plt.subplots(figsize=(10, 3.5))
         x = list(range(n_days))
-        y_win_plat   = daily["win_plat_cum"].tolist()
         y_place_plat = daily["place_plat_cum"].tolist()
 
-        ax.plot(x, y_win_plat,   color="#2563eb", linewidth=2.5, zorder=3, label="WIN Plat")
         ax.plot(x, y_place_plat, color="#f59e0b", linewidth=2.5, zorder=3, label="PLACE Plat")
         ax.axhline(0, color="#aaa", linewidth=0.8, linestyle="--")
         ax.set_xticks(x)
         ax.set_xticklabels(daily["date_label"].tolist(), rotation=30, ha="right", fontsize=9)
         ax.set_ylabel("P&L cumule (EUR)", fontsize=10)
-        ax.set_title("P&L cumule Plat - WIN vs PLACE (depuis 06/05/2026)",
+        ax.set_title("P&L cumule Plat - PLACE (depuis 06/05/2026)",
                      fontsize=12, fontweight="bold")
         ax.legend(fontsize=9, loc="upper left")
         ax.grid(axis="y", alpha=0.3)
@@ -1064,13 +1060,10 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
         rows_html += f"""
         <tr>
           <td>{r['date_label']}</td>
-          <td {_pnl_style(r['win_plat_pnl'])}>{r['win_plat_pnl']:+.1f} &euro;</td>
-          <td {_pnl_style(r['win_plat_cum'])}>{r['win_plat_cum']:+.1f} &euro;</td>
           <td {_pnl_style(r['place_plat_pnl'])}>{r['place_plat_pnl']:+.1f} &euro;</td>
           <td {_pnl_style(r['place_plat_cum'])}>{r['place_plat_cum']:+.1f} &euro;</td>
         </tr>"""
 
-    win_plat_pnl_class   = "pos" if win_plat_pnl >= 0 else "neg"
     place_plat_pnl_class = "pos" if place_plat_pnl >= 0 else "neg"
 
     html = f"""<!DOCTYPE html>
@@ -1111,10 +1104,9 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
 </head>
 <body>
 <h1>Performance — Stratégie Plat</h1>
-<p class="subtitle">WIN vs PLACÉ · LightGBM &nbsp;|&nbsp; depuis le 06/05/2026 &nbsp;|&nbsp; Généré le {generated_at}</p>
+<p class="subtitle">PLACÉ · LightGBM &nbsp;|&nbsp; depuis le 06/05/2026 &nbsp;|&nbsp; Généré le {generated_at}</p>
 
 <div class="cards">
-  <div class="card"><div class="val {win_plat_pnl_class}">{win_plat_pnl:+.1f} &euro;</div><div class="lbl">P&amp;L WIN Plat</div></div>
   <div class="card"><div class="val {place_plat_pnl_class}">{place_plat_pnl:+.1f} &euro;</div><div class="lbl">P&amp;L PLAC&Eacute; Plat</div></div>
   <div class="card"><div class="val">{n_days}</div><div class="lbl">Jours actifs</div></div>
 </div>
@@ -1125,11 +1117,9 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
 <table>
   <thead><tr>
     <th rowspan="2">Date</th>
-    <th colspan="2" class="win-plat-col" style="text-align:center">WIN Plat</th>
     <th colspan="2" class="place-plat-col" style="text-align:center">PLAC&Eacute; Plat</th>
   </tr>
   <tr>
-    <th class="win-plat-col">P&amp;L</th><th class="win-plat-col">Cumul&eacute;</th>
     <th class="place-plat-col">P&amp;L</th><th class="place-plat-col">Cumul&eacute;</th>
   </tr></thead>
   <tbody>{rows_html}</tbody>
