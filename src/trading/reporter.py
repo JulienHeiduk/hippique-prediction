@@ -967,8 +967,8 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
 
     generated_at = datetime.now().strftime("%d/%m/%Y %H:%M")
 
-    # ── Parse gains from each bet sheet HTML (Plat only, from 2026-05-06) ────
-    PERF_START_DATE = "20260506"
+    # ── Parse gains from each bet sheet HTML (Plat only, from 2026-05-01) ────
+    PERF_START_DATE = "20260501"
     rows: list[dict] = []
     for p in sorted(REPORTS_DIR.glob("bets_*.html")):
         date = p.stem.replace("bets_", "")
@@ -1033,7 +1033,7 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
         ax.set_xticks(x)
         ax.set_xticklabels(daily["date_label"].tolist(), rotation=30, ha="right", fontsize=9)
         ax.set_ylabel("P&L cumule (EUR)", fontsize=10)
-        ax.set_title("P&L cumule Plat - WIN vs PLACE (depuis 06/05/2026)",
+        ax.set_title("P&L cumule Plat - WIN vs PLACE (depuis 01/05/2026)",
                      fontsize=12, fontweight="bold")
         ax.legend(fontsize=9, loc="upper left")
         ax.grid(axis="y", alpha=0.3)
@@ -1111,7 +1111,7 @@ def export_performance_html(conn: duckdb.DuckDBPyConnection) -> Path:
 </head>
 <body>
 <h1>Performance — Stratégie Plat</h1>
-<p class="subtitle">WIN vs PLACÉ · LightGBM &nbsp;|&nbsp; depuis le 06/05/2026 &nbsp;|&nbsp; Généré le {generated_at}</p>
+<p class="subtitle">WIN vs PLACÉ · LightGBM &nbsp;|&nbsp; depuis le 01/05/2026 &nbsp;|&nbsp; Généré le {generated_at}</p>
 
 <div class="cards">
   <div class="card"><div class="val {win_plat_pnl_class}">{win_plat_pnl:+.1f} &euro;</div><div class="lbl">P&amp;L WIN Plat</div></div>
