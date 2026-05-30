@@ -35,7 +35,14 @@
       "Bash(mv:*)",
       "Bash(tasklist)",
       "Bash(findstr \"python3.12\")",
-      "Bash(tasklist:*)"
+      "Bash(tasklist:*)",
+      "Read(//c/Users/julie/AppData/Local/Temp/claude/C--Users-julie-OneDrive-Bureau-hippique-prediction/c62c7ae4-6a87-4fe1-bc36-5aff8bf2487e/tasks/**)",
+      "Bash(powershell *)",
+      "Bash(Select-Object -Last 60)",
+      "Bash(PYTHONPATH='C:\\\\Users\\\\julie\\\\OneDrive\\\\Bureau\\\\hippique-prediction' .venv/Scripts/python.exe -c ' *)",
+      "Bash(git push *)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(echo \"push exit=$?\")"
     ]
   }
 }
