@@ -156,7 +156,7 @@ with tab_perf:
         chart_cols = [c for c in chart_cols if c in daily_df.columns]
         if chart_cols:
             st.line_chart(daily_df[chart_cols])
-            st.caption("P&L cumulé Plat · WIN & Placé · depuis le 01/05/2026 · LightGBM")
+            st.caption("P&L cumulé Plat · WIN & Placé · depuis le 06/05/2026 · LightGBM")
         else:
             st.info("Aucune donnée de performance disponible.")
     else:
