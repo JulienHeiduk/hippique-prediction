@@ -1,5 +1,10 @@
 # Runtime artifacts
 scheduler.lock
+*.lock
+.claude/scheduled_tasks.lock
+
+# ML training artifacts
+catboost_info/
 
 # Python
 __pycache__/
