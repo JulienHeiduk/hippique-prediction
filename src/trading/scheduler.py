@@ -360,12 +360,12 @@ def start_scheduler() -> None:
     scheduler.add_job(run_hourly_update, "cron", hour="23", minute="59",
                       misfire_grace_time=1800, coalesce=True)
 
-    # Evening resolution at 22:30 (results published ~22:00)
+    # Evening resolution at 23:55 (run late so the full day's results are published)
     # misfire_grace_time=3600s: run on restart if missed by less than 1 hour
-    scheduler.add_job(run_evening_session, "cron", hour=22, minute=30, misfire_grace_time=3600)
+    scheduler.add_job(run_evening_session, "cron", hour=23, minute=55, misfire_grace_time=3600)
 
     logger.info(
-        "Scheduler starting — 08:30 morning / 10:00–22:00 every 30min / 22:30 evening"
+        "Scheduler starting — 08:30 morning / 10:00–22:00 every 30min / 23:55 evening"
     )
     try:
         scheduler.start()
